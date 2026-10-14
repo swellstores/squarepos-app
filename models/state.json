@@ -44,6 +44,11 @@
       "label": "Sales read up to",
       "description": "The time of change up to which Square's orders have been read."
     },
+    "date_from": {
+      "type": "date",
+      "label": "Sales imported from",
+      "description": "Sales completed earlier are not imported, even when Square changes them later: the time the import was switched on, or the date of Import past sales."
+    },
     "requested": {
       "type": "bool",
       "label": "Search requested",
@@ -61,7 +66,7 @@
     "swell_location": {
       "type": "string",
       "label": "Swell stock location",
-      "description": "On the store record: the name set under Stock, as it was last looked up."
+      "description": "On the store record: the name set under Inventory, as it was last looked up."
     },
     "swell_location_id": {
       "type": "string",

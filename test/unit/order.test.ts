@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOrder, kindOf, mergeRefunds, refundsBySale, tenderText, toAmount } from "../../functions/lib/order";
+import { buildOrder, kindOf, mergeRefunds, refundsBySale, salePayments, tenderText, toAmount } from "../../functions/lib/order";
 import type { OrderContext } from "../../functions/lib/order";
 import { cardPayment, cardSale, cashSale, refundOrder } from "../fixtures/square-orders";
 
@@ -149,6 +149,24 @@ describe("what a Square order is", () => {
     expect(kindOf(refundOrder)).toBe("refund");
     expect(kindOf({ ...cashSale, returns: refundOrder.returns })).toBe("exchange");
     expect(kindOf({ ...cashSale, state: "OPEN" })).toBe("other");
+  });
+
+  it("is paid once per tender, a tender's tip included in its amount", async () => {
+    const split = {
+      ...cashSale,
+      total_money: usd(5300),
+      total_tip_money: usd(300),
+      tenders: [
+        { id: "card", type: "CARD", amount_money: usd(3300), tip_money: usd(300) },
+        { id: "cash", type: "CASH", amount_money: usd(2000) },
+      ],
+    };
+    const payments = await salePayments(split, async (text) => text);
+
+    expect(payments.map((payment) => [payment.id, payment.amount])).toEqual([
+      ["square-tender:card", 33],
+      ["square-tender:cash", 20],
+    ]);
   });
 
   it("names how it was paid", () => {

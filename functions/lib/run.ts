@@ -77,9 +77,15 @@ interface Plan {
   sales?: { locations: { id: string; name: string }[]; on: boolean };
 }
 
+/**
+ * Square is asked nothing after this long in a step. A step that outlives its timeout is
+ * started again while the first attempt may still be sending
+ */
+const SQUARE_MS = 80 * 1000;
+
 async function load(swell: StoreClient): Promise<{ settings: Settings; api: Api }> {
   const settings = ((await swell.settings()) || {}) as Settings;
-  return { settings, api: squareApi(settings) };
+  return { settings, api: squareApi(settings, Date.now() + SQUARE_MS) };
 }
 
 /** Run inside a step: a refused token is the merchant's to correct, and no reason to repeat the step */
@@ -286,7 +292,7 @@ async function searchSales(req: RunRequest, step: Steps, owner: string, plan: Pl
           return { lost: true };
         }
         const { settings, api } = await load(req.swell);
-        const ctx = salesContext(req, plan, settings, api);
+        const ctx = { ...salesContext(req, plan, settings, api), from: (await readState(req.swell, "sales"))?.date_from };
         let cursor: string | undefined;
         let seen: string | undefined;
         do {
@@ -372,7 +378,16 @@ export async function run(req: RunRequest, step: Steps): Promise<Row> {
       ? await step.do("claim", STEP, async () => ({ held: await holdsClaim(swell, data.claim) })).then((result) => result.held)
       : false;
 
-  const plan = (await step.do("prepare", STEP, () => guarded(swell, () => prepare(swell)))) as Plan & { refused?: string };
+  let plan: Plan & { refused?: string };
+  try {
+    plan = (await step.do("prepare", STEP, () => guarded(swell, () => prepare(swell)))) as Plan & { refused?: string };
+  } catch (err) {
+    // Square cannot be reached: the next notice or sweep starts a run without waiting for the claim to expire
+    if (adopted) {
+      await step.do("release", STEP, async () => releaseClaim(swell, data.claim).then(() => ({})));
+    }
+    throw err;
+  }
   if (plan.stop || plan.refused) {
     if (adopted) {
       await step.do("release", STEP, async () => releaseClaim(swell, data.claim).then(() => ({})));
@@ -558,14 +573,18 @@ export async function run(req: RunRequest, step: Steps): Promise<Row> {
       }
 
       if (plan.sales?.on) {
+        const since = round === 1 && job === "import-past" && typeof data.since === "string" && !Number.isNaN(new Date(data.since).getTime()) ? new Date(data.since).toISOString() : undefined;
         const todo = await step.do(`sales ${round}`, STEP, async () => {
           const state = await readState(swell, "sales");
           if (!state?.cursor) {
             // Sales are imported from about the moment the import was switched on: the first run
             // comes within minutes of it, and a sale made in between is not left out
             const cursor = new Date(Date.now() - FIRST_SEARCH_BACK_MS).toISOString();
-            await writeState(swell, "sales", { cursor, requested: false });
+            await writeState(swell, "sales", { cursor, date_from: since && since < cursor ? since : cursor, requested: false });
             return { search: true, on: true, cursor };
+          }
+          if (since && (!state.date_from || new Date(since) < new Date(state.date_from))) {
+            await writeState(swell, "sales", { date_from: since });
           }
           const search = state.requested === true || full || job === "retry-sales" || job === "import-past";
           if (state.requested === true) {
@@ -575,8 +594,8 @@ export async function run(req: RunRequest, step: Steps): Promise<Row> {
           return { search, on: true, cursor: state.cursor as string };
         });
         if (todo.on) {
-          if (round === 1 && job === "import-past" && typeof data.since === "string" && !Number.isNaN(new Date(data.since).getTime())) {
-            const past = await searchSales(req, step, owner, plan, new Date(data.since).toISOString(), "past sales");
+          if (since) {
+            const past = await searchSales(req, step, owner, plan, since, "past sales");
             if (past.lost || past.refused) {
               summary.stopped = "The search for past sales was cut short.";
               break;

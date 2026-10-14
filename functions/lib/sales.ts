@@ -6,7 +6,7 @@
  * imported once, and where a sale that cannot be imported is listed with the reason.
  */
 
-import { recordId } from "./ids";
+import { recordId, timedId } from "./ids";
 import { PAYMENT_METHOD, buildOrder, decimals, describeSale, kindOf, mergeRefunds, refundOfPayment, refundsBySale, salePayments, takenByApi, totalMinor } from "./order";
 import type { Money, Refund } from "./order";
 import { isDuplicate, writeErrors } from "./settings";
@@ -27,6 +27,8 @@ export interface SalesContext {
   announce: boolean;
   /** Time (ms) after which no further sale is started */
   deadline: number;
+  /** Sales completed earlier are not imported: the import was switched on, or past sales asked for, from then */
+  from?: string;
   /** The account for sales without a known customer, once it was looked up */
   walkInId?: string;
 }
@@ -118,22 +120,30 @@ async function recordPayments(ctx: SalesContext, orderId: string, payments: Mone
 async function recordRefunds(ctx: SalesContext, orderId: string, refunds: Refund[]): Promise<string | undefined> {
   let first: string | undefined;
   for (const refund of refunds) {
-    const body = {
-      id: await recordId(`square-refund:${refund.id}`),
+    const id = await recordId(`square-refund:${refund.id}`);
+    let paymentId = refund.tender_id ? await recordId(`square-tender:${refund.tender_id}`) : undefined;
+    if (!paymentId || !(await ctx.swell.get(`/payments/${paymentId}`, { fields: "id" }))) {
+      first ||= ((await ctx.swell.get("/payments", { where: { order_id: orderId }, sort: "date_created asc", limit: 1 })) as Page)?.results?.[0]?.id;
+      paymentId = first;
+    }
+    if (!paymentId) {
+      return `Swell did not record the refund of ${refund.amount}. The order has no payment to refund.`;
+    }
+    // Recorded before: the store refuses the same refund again once the payment is refunded in full
+    if (await ctx.swell.get(`/payments/${paymentId}/refunds/${id}`)) {
+      continue;
+    }
+    const result = await ctx.swell.post(`/payments/${paymentId}/refunds`, {
+      id,
       amount: refund.amount,
       reason: refund.reason || "Refunded in Square",
       transaction_id: refund.id,
       ...(refund.date ? { date_created: refund.date } : {}),
       ...event(ctx),
-    };
-    let result = refund.tender_id ? await ctx.swell.post(`/payments/${await recordId(`square-tender:${refund.tender_id}`)}/refunds`, body) : "";
-    if (!result) {
-      first ||= ((await ctx.swell.get("/payments", { where: { order_id: orderId }, sort: "date_created asc", limit: 1 })) as Page)?.results?.[0]?.id;
-      result = first ? await ctx.swell.post(`/payments/${first}/refunds`, body) : "";
-    }
+    });
     const errors = writeErrors(result);
     if (errors || !result) {
-      return `Swell did not record the refund of ${refund.amount}. ${errors || "The order has no payment to refund."}`;
+      return `Swell did not record the refund of ${refund.amount}. ${errors || "No refund was returned."}`;
     }
   }
   return undefined;
@@ -179,6 +189,12 @@ export interface Found {
   cursor?: string;
 }
 
+/** True for a sale completed before a time. An old sale is found again when Square changes it, by a refund for example */
+function before(order: Row, from: string | undefined): boolean {
+  const sold = new Date(order.closed_at || order.created_at || "").getTime();
+  return Boolean(from) && sold < new Date(from as string).getTime();
+}
+
 /** Reads one page of Square's completed orders from a time on, and records what it finds */
 export async function findSales(ctx: SalesContext, from: string, cursor?: string): Promise<Found> {
   const found: Found = { sales: 0, refunds: 0 };
@@ -193,7 +209,7 @@ export async function findSales(ctx: SalesContext, from: string, cursor?: string
     const kind = kindOf(order);
     if (kind === "refund") {
       found.refunds += await applyRefunds(ctx, order);
-    } else if (kind === "sale" || kind === "exchange") {
+    } else if ((kind === "sale" || kind === "exchange") && !before(order, ctx.from)) {
       const { created } = await claimSale(ctx.swell, order.id, describeSale(order, undefined, locationName(ctx, order.location_id)));
       found.sales += created ? 1 : 0;
     }
@@ -320,7 +336,8 @@ export async function importSale(ctx: SalesContext, sale: Sale): Promise<Importe
     await saveSale(ctx.swell, sale, merged);
   }
   const account = await accountFor(ctx, order, payment);
-  const id = await recordId(`square-order:${order.id}`);
+  // Starting with the time of the sale, the order takes its place in the dashboard's list of orders
+  const id = (sale.order_id as string | undefined) || (await timedId(order.closed_at || order.created_at, `square-order:${order.id}`));
 
   // An earlier attempt may have created the order and stopped before the record said so
   let created = (await ctx.swell.get(`/orders/${id}`, { fields: "number,grand_total,currency,account_id" })) as Row | "" | null;

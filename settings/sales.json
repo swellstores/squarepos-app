@@ -31,7 +31,7 @@
       "hint": "Imports the Square sales completed since a date",
       "modal": {
         "title": "Import past sales",
-        "description": "Imports the sales completed in Square since the date you choose, at the locations set under In-store sales. A sale that was imported before is not imported twice. The orders appear under Orders → Square sales.",
+        "description": "Imports the sales completed in Square since the date you choose, at the locations set under Sales. A sale that was imported before is not imported twice. The orders appear under Orders → Square sales.",
         "submit_label": "Import",
         "fields": [
           {

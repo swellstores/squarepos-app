@@ -40,7 +40,7 @@ export function resolveLocations(settings: Settings, merchant: Merchant, locatio
   if (stockName) {
     stock = find(active, stockName);
     if (!stock) {
-      stockProblem = `Square has no active location named "${stockName}" (set under Stock). Its locations: ${names}.`;
+      stockProblem = `Square has no active location named "${stockName}" (set under Inventory). Its locations: ${names}.`;
     }
   } else {
     stock = active.length === 1 ? active[0] : active.find((location) => location.id === merchant.main_location_id) || active[0];
@@ -54,7 +54,7 @@ export function resolveLocations(settings: Settings, merchant: Merchant, locatio
   for (const name of salesNames) {
     const location = find(active, name);
     if (!location) {
-      salesProblems.push(`Square has no active location named "${name}" (set under In-store sales). Its locations: ${names}.`);
+      salesProblems.push(`Square has no active location named "${name}" (set under Sales). Its locations: ${names}.`);
     } else if (!sales.includes(location)) {
       sales.push(location);
     }
@@ -81,12 +81,12 @@ export function resolveSwellLocation(
   }
   const locations = (shipments?.features?.multi_location && Array.isArray(shipments.locations) && shipments.locations) || [];
   if (locations.length === 0) {
-    return { problem: `This store does not keep stock by location: clear "Swell stock location" under Stock.` };
+    return { problem: `This store does not keep stock by location: clear "Swell stock location" under Inventory.` };
   }
   const found = locations.find((location) => same(location.name, name)) || locations.find((location) => location.id === name);
   if (!found) {
     return {
-      problem: `The store has no stock location named "${name}" (set under Stock). Its locations: ${locations.map((location) => `"${location.name || location.id}"`).join(", ")}.`,
+      problem: `The store has no stock location named "${name}" (set under Inventory). Its locations: ${locations.map((location) => `"${location.name || location.id}"`).join(", ")}.`,
     };
   }
   return { id: found.id, name: found.name || found.id };

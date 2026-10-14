@@ -174,6 +174,15 @@ describe("one run at a time", () => {
     expect(state("run")).toBeUndefined();
   });
 
+  it("gives back the claim the starting function took when Square cannot be reached at all", async () => {
+    await takeClaim(store.swell, "claim-1", Date.now(), true);
+    square.intercept((call) => (call.path === "/merchants/me" ? square.unavailable() : undefined));
+
+    await expect(start({ source: "square", claim: "claim-1" })).rejects.toThrow();
+
+    expect(state("run")).toBeUndefined();
+  });
+
   it("gives the claim back when a step fails for good", async () => {
     square.intercept((call) => (call.path === "/inventory/counts/batch-retrieve" ? square.unavailable() : undefined));
 
@@ -187,17 +196,21 @@ describe("one run at a time", () => {
 describe("sales in a run", () => {
   it("imports from about the moment the import is switched on, and from an earlier date on request", async () => {
     square.orders.push(cashSale, cardSale);
-    const recent = { ...cashSale, id: "recent-sale", updated_at: new Date(Date.now() - 60 * 1000).toISOString() };
-    square.orders.push(recent);
+    const minuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
+    square.orders.push({ ...cashSale, id: "recent-sale", closed_at: minuteAgo, updated_at: minuteAgo });
+    // A sale of yesterday that Square changed a minute ago (refunded, for example)
+    square.orders.push({ ...cashSale, id: "changed-sale", updated_at: minuteAgo });
 
     await start({ source: "sweep", full: true });
     // The sale of a minute ago is in, the ones of yesterday are not
     expect(store.orders.map((order) => order.$app.squarepos.square_order_id)).toEqual(["recent-sale"]);
+    expect(store.sales.map((sale) => sale.key)).toEqual(["recent-sale"]);
     expect(state("sales")?.cursor).toBeTruthy();
 
     await start(action("import-past", { settings: "sales" }, { since: "2026-10-13T18:19:00.000Z" }), "action", "run-2");
 
     expect(store.orders.map((order) => order.number)).toContain("SQ-eQj3");
+    // The changed sale was completed before the date asked for
     expect(store.orders).toHaveLength(2);
   });
 

@@ -7,7 +7,7 @@
  * made from it, so a step that is repeated after a failure changes nothing a second time.
  */
 
-import { recordId, requestKey } from "./ids";
+import { requestKey, timedId } from "./ids";
 import { plan, squareAdjustments, squareParts, startingPoint, swellEntry, wholeQuantity } from "./merge";
 import type { SquarePart, StockEntry, SwellReason } from "./merge";
 import { writeErrors } from "./settings";
@@ -78,13 +78,9 @@ export function reference(link: Link, seq: number): string {
   return `swell:${link.id}:${seq}`;
 }
 
-/**
- * The id of the Swell stock entry of a step. It starts with the step's time like the
- * store's own ids, so the entry takes its place in the product's stock history.
- */
+/** The id of the Swell stock entry of a step: the history's running level follows the entry ids */
 export async function entryId(link: Link, step: Pick<Step, "seq" | "date">): Promise<string> {
-  const seconds = Math.floor(new Date(step.date).getTime() / 1000);
-  return seconds.toString(16).padStart(8, "0").slice(-8) + (await recordId(reference(link, step.seq))).slice(0, 16);
+  return timedId(step.date, reference(link, step.seq));
 }
 
 /* Reading Swell */

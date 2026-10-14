@@ -58,6 +58,8 @@ describe("importing sales", () => {
     const order = store.orders.find((entry) => entry.number === "SQ-eQj3") as Row;
     // Paid by a record of the Square payment, as the dashboard needs it to show the order paid
     expect(order).toMatchObject({ grand_total: 20, payment_total: 20, paid: true, status: "complete" });
+    // The dashboard lists orders by id: the id starts with the time of the sale
+    expect(parseInt(order.id.slice(0, 8), 16)).toBe(Math.floor(new Date(cardSale.closed_at).getTime() / 1000));
     expect(store.payments.filter((payment) => payment.order_id === order.id)).toMatchObject([{ method: "square_pos", amount: 20, transaction_id: cardSale.tenders[0].id }]);
     expect(store.sales.find((sale) => sale.key === cardSale.id)).toMatchObject({
       status: "imported",
@@ -220,6 +222,12 @@ describe("refunds", () => {
     expect(store.sales[0]).toMatchObject({ refunded: 20, refund_state: "full" });
     expect(store.sales[0].refunds).toHaveLength(2);
     expect(order).toMatchObject({ refund_total: 20, refunded: true });
+
+    // Retried: the store would refuse the refunds again once the payment is refunded in full
+    store.sales[0].status = "pending";
+    await run();
+    expect(store.sales[0]).toMatchObject({ status: "imported", problem: null });
+    expect(order).toMatchObject({ refund_total: 20 });
   });
 
   it("is on the order from the start when it was made before the sale was imported, and is not counted again", async () => {

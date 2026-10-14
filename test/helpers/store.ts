@@ -186,6 +186,11 @@ export function createStore(seed: { settings?: Row; shipments?: Row; mode?: "fun
       if (path === "/settings/payments") {
         return paymentSettings;
       }
+      const refund = /^\/payments\/([^/]+)\/refunds\/([^/]+)$/.exec(path);
+      if (refund) {
+        const found = collections.payments.find((row) => row.id === refund[1])?.refunds?.find((row: Row) => row.id === refund[2]);
+        return found ? { ...found } : "";
+      }
       const { name, id } = locate(path);
       if (id) {
         const row = collections[name].find((item) => item.id === id);
@@ -216,6 +221,11 @@ export function createStore(seed: { settings?: Row; shipments?: Row; mode?: "fun
         }
         if ($notify !== false) {
           throw new Error("A refund record must not notify");
+        }
+        // As the store does, also for a refund posted again under its id
+        const refunded = (payment.refunds || []).reduce((sum: number, row: Row) => sum + row.amount, 0);
+        if (data.amount > payment.amount - refunded + 1e-9) {
+          return refuse({ amount: { code: "INVALID", message: "Refund cannot exceed payment amount" } });
         }
         payment.refunds = [...(payment.refunds || []).filter((row: Row) => row.id !== data.id), { ...data, method: payment.method, success: true }];
         settle(payment.order_id);

@@ -345,13 +345,14 @@ export async function salePayments(order: Sq, recordIdOf: (text: string) => Prom
   }
   const date: string = order.closed_at || order.created_at;
   const tenders = ((order.tenders || []) as Sq[]).filter((tender) => tender.id && minor(tender.amount_money) > 0);
-  const sum = tenders.reduce((all, tender) => all + minor(tender.amount_money) + minor(tender.tip_money), 0);
+  // A tender's amount includes its tip
+  const sum = tenders.reduce((all, tender) => all + minor(tender.amount_money), 0);
   if (tenders.length > 0 && sum === total) {
     return Promise.all(
       tenders.map(async (tender) => ({
         id: await recordIdOf(`square-tender:${tender.id}`),
         tender_id: tender.id as string,
-        amount: toAmount(minor(tender.amount_money) + minor(tender.tip_money), currency),
+        amount: toAmount(minor(tender.amount_money), currency),
         date,
       })),
     );

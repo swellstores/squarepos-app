@@ -331,7 +331,7 @@
           },
           "modal": {
             "title": "Start syncing this item",
-            "description": "Starts the stock sync. This is the one time a side wins: the other side receives the difference as a single stock adjustment. From then on only changes travel, in both directions. Items that are not matched are left as they are.",
+            "description": "Starts the stock sync. This is the one time a side wins: the other side receives the difference as a single stock adjustment. From then on only changes travel, in both directions.",
             "submit_label": "Start",
             "fields": [
               {
