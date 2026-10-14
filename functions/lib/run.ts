@@ -68,8 +68,12 @@ const MARKED_BATCH = 40;
 const FULL_BATCH = 100;
 const SALES_BATCH = 10;
 const SEARCH_OVERLAP_MS = 2 * 60 * 1000;
-/** Steps a search takes in one round before the rest of the round's work: the next round or run goes on with it */
-const SEARCH_STEPS = 10;
+/**
+ * Steps a search, and the import of the sales it found, take in one round. The next round
+ * or run goes on with them: the round's stock sync does not wait for a long import
+ */
+const SEARCH_STEPS = 3;
+const IMPORT_STEPS = 3;
 /** Square searches the orders of at most ten locations at a time */
 const SEARCH_GROUP = 10;
 
@@ -77,7 +81,7 @@ interface Plan {
   /** Why nothing can be done at all */
   stop?: string;
   /** The Square location that shares its stock, and whether the sync is switched on */
-  stock?: { locationId: string; swellLocation?: string; on: boolean };
+  stock?: { locationId: string; swellLocation?: string; on: boolean; setting: string };
   sales?: { locations: { id: string; name: string }[]; on: boolean };
 }
 
@@ -125,7 +129,7 @@ async function prepare(swell: StoreClient): Promise<Plan> {
       problems.push(resolved.stockProblem);
     }
   } else if (resolved.stock) {
-    plan.stock = { locationId: resolved.stock.id, on: stockEnabled(settings) };
+    plan.stock = { locationId: resolved.stock.id, on: stockEnabled(settings), setting: stockSetting(settings) };
     const name = (settings.inventory?.swell_location || "").trim();
     if (name) {
       // A workflow cannot read the store's own settings: the functions keep what they say
@@ -198,12 +202,21 @@ async function chosen(
 
 /* Stock */
 
+/** The stock settings the run's plan was made from: the sync, and the two locations it names */
+function stockSetting(settings: Settings): string {
+  return JSON.stringify([stockEnabled(settings), (settings.inventory?.location || "").trim(), (settings.inventory?.swell_location || "").trim()]);
+}
+
 async function stockBatch(req: RunRequest, owner: string, plan: Plan, query: Row, limit: number): Promise<Row> {
   return guarded(req.swell, async () => {
     if (!(await holdsClaim(req.swell, owner))) {
       return { lost: true };
     }
-    const { api } = await load(req.swell);
+    const { settings, api } = await load(req.swell);
+    if (stockSetting(settings) !== plan.stock!.setting) {
+      // Switched off, or another location chosen, since the run began: the next run works with them
+      return { changed: true };
+    }
     const page = (await req.swell.get("/items", { ...query, sort: "id asc", limit })) as Page<Link>;
     const links = page?.results || [];
     const ctx: StockContext = {
@@ -219,7 +232,14 @@ async function stockBatch(req: RunRequest, owner: string, plan: Plan, query: Row
   });
 }
 
-async function syncStock(req: RunRequest, step: Steps, owner: string, plan: Plan, full: boolean, round: number): Promise<{ lost?: boolean; refused?: boolean; stopped: number }> {
+async function syncStock(
+  req: RunRequest,
+  step: Steps,
+  owner: string,
+  plan: Plan,
+  full: boolean,
+  round: number,
+): Promise<{ lost?: boolean; refused?: boolean; changed?: boolean; stopped: number }> {
   const location = plan.stock!.locationId;
   let stopped = 0;
 
@@ -227,6 +247,9 @@ async function syncStock(req: RunRequest, step: Steps, owner: string, plan: Plan
   if (full) {
     stopped += (
       await step.do(`other location ${round}`, STEP, async () => {
+        if (stockSetting(((await req.swell.settings()) || {}) as Settings) !== plan.stock!.setting) {
+          return { stopped: 0 };
+        }
         const page = (await req.swell.get("/items", { where: { status: "active", location_id: { $ne: location } }, limit: 100 })) as Page<Link>;
         for (const link of page?.results || []) {
           await req.swell.put(`/items/${link.id}`, {
@@ -245,8 +268,8 @@ async function syncStock(req: RunRequest, step: Steps, owner: string, plan: Plan
     const result = await step.do(`stock ${round}.${batch}`, STEP, () =>
       stockBatch(req, owner, plan, { where: { status: "active", location_id: location, $or: [{ marked: true }, { pending: true }] } }, MARKED_BATCH),
     );
-    if (result.lost || refused(result)) {
-      return { lost: result.lost === true, refused: refused(result), stopped };
+    if (result.lost || refused(result) || result.changed) {
+      return { lost: result.lost === true, refused: refused(result), changed: result.changed === true, stopped };
     }
     stopped += result.stopped || 0;
     if (result.found < MARKED_BATCH && !result.left) {
@@ -262,8 +285,8 @@ async function syncStock(req: RunRequest, step: Steps, owner: string, plan: Plan
       const result = await step.do(`compare ${round}.${batch}`, STEP, () =>
         stockBatch(req, owner, plan, { where: { status: "active", location_id: location, ...(cursor ? { id: { $gt: cursor } } : {}) } }, FULL_BATCH),
       );
-      if (result.lost || refused(result)) {
-        return { lost: result.lost === true, refused: refused(result), stopped };
+      if (result.lost || refused(result) || result.changed) {
+        return { lost: result.lost === true, refused: refused(result), changed: result.changed === true, stopped };
       }
       stopped += result.stopped || 0;
       if (!result.last || (result.found < FULL_BATCH && !result.left)) {
@@ -341,8 +364,19 @@ function locationIds(plan: Plan): string {
     .join(",");
 }
 
-/** Goes on with a search for some steps. `done` once it has read its range for every location */
-async function searchSales(req: RunRequest, step: Steps, owner: string, plan: Plan, key: PassKey, name: string): Promise<{ lost?: boolean; refused?: boolean; done?: boolean }> {
+/**
+ * Goes on with a search for some steps. `done` once it has read its range for every location.
+ * `failed` counts the sales whose refunds the store refused
+ */
+async function searchSales(
+  req: RunRequest,
+  step: Steps,
+  owner: string,
+  plan: Plan,
+  key: PassKey,
+  name: string,
+): Promise<{ lost?: boolean; refused?: boolean; done?: boolean; failed: number }> {
+  let failed = 0;
   for (let batch = 1; batch <= SEARCH_STEPS; batch += 1) {
     const result = await step.do(`${name} ${batch}`, STEP, () =>
       guarded(req.swell, async () => {
@@ -359,9 +393,11 @@ async function searchSales(req: RunRequest, step: Steps, owner: string, plan: Pl
         // Other locations chosen since the search began: it reads its range again for those
         let pass: Pass = saved.locations === locationIds(plan) ? { ...saved } : { ...saved, locations: locationIds(plan), group: 0, page: null };
         const ids = pass.locations.split(",");
+        let refusedRefunds = 0;
         do {
           try {
             const found = await findSales(ctx, ids.slice(pass.group * SEARCH_GROUP, (pass.group + 1) * SEARCH_GROUP), pass.from, pass.until, pass.page || undefined);
+            refusedRefunds += found.failed;
             pass = found.cursor ? { ...pass, page: found.cursor } : { ...pass, group: pass.group + 1, page: null };
           } catch (err) {
             if (!(pass.page && err instanceof SquareError && err.kind === "refused")) {
@@ -377,23 +413,25 @@ async function searchSales(req: RunRequest, step: Steps, owner: string, plan: Pl
           // Read to its end for every location: the next search for new sales starts there
           ...(done && key === "search" && !(state?.cursor && state.cursor >= pass.until) ? { cursor: pass.until } : {}),
         });
-        return { done };
+        return { done, failed: refusedRefunds };
       }),
     );
     if (result.lost || refused(result)) {
-      return { lost: result.lost === true, refused: refused(result) };
+      return { lost: result.lost === true, refused: refused(result), failed };
     }
+    failed += result.failed || 0;
     if (result.done) {
-      return { done: true };
+      return { done: true, failed };
     }
   }
-  return { done: false };
+  return { done: false, failed };
 }
 
-async function importWaiting(req: RunRequest, step: Steps, owner: string, plan: Plan, round: number): Promise<{ lost?: boolean; refused?: boolean; failed: number }> {
+/** Imports waiting sales for some steps. `more` when sales are left for the next round */
+async function importWaiting(req: RunRequest, step: Steps, owner: string, plan: Plan, round: number): Promise<{ lost?: boolean; refused?: boolean; failed: number; more?: boolean }> {
   let after: string | undefined;
   let failed = 0;
-  for (let batch = 1; batch <= 200; batch += 1) {
+  for (let batch = 1; batch <= IMPORT_STEPS; batch += 1) {
     const cursor: string | undefined = after;
     const result = await step.do(`import ${round}.${batch}`, STEP, () =>
       guarded(req.swell, async () => {
@@ -420,11 +458,11 @@ async function importWaiting(req: RunRequest, step: Steps, owner: string, plan: 
     }
     failed += result.failed || 0;
     if (!result.last || (result.found < SALES_BATCH && !result.left)) {
-      break;
+      return { failed };
     }
     after = result.last;
   }
-  return { failed };
+  return { failed, more: true };
 }
 
 /** The alert about sales is over once none is left that needs attention */
@@ -622,6 +660,7 @@ export async function run(req: RunRequest, step: Steps): Promise<Row> {
   try {
     for (let round = 1; round <= 3; round += 1) {
       let failed = 0;
+      let importing = false;
       // A sweep that found this run working asked it for a full comparison
       const asked = await step.do(`sweep ${round}`, STEP, async () => {
         const sweep = await readState(swell, "sweep");
@@ -648,6 +687,11 @@ export async function run(req: RunRequest, step: Steps): Promise<Row> {
           }
           return {};
         });
+        if (stock.changed) {
+          // The rest of this run leaves the stock alone: the next one works with the new settings
+          plan.stock.on = false;
+          summary.stock = "The stock settings changed while the run worked.";
+        }
       }
 
       if (plan.sales?.on) {
@@ -696,6 +740,7 @@ export async function run(req: RunRequest, step: Steps): Promise<Row> {
               summary.stopped = "The search for sales was cut short.";
               break;
             }
+            failed += found.failed;
           }
           if (todo.past) {
             const past = await searchSales(req, step, owner, plan, "past", `past sales ${round}`);
@@ -703,13 +748,15 @@ export async function run(req: RunRequest, step: Steps): Promise<Row> {
               summary.stopped = "The search for past sales was cut short.";
               break;
             }
+            failed += past.failed;
           }
           const imported = await importWaiting(req, step, owner, plan, round);
           if (imported.lost || imported.refused) {
             summary.stopped = "The import of sales was cut short.";
             break;
           }
-          failed = imported.failed;
+          failed += imported.failed;
+          importing = imported.more === true;
           await step.do(`sales alert ${round}`, STEP, async () => settleSales(swell, failed).then(() => ({})));
         }
       }
@@ -723,8 +770,8 @@ export async function run(req: RunRequest, step: Steps): Promise<Row> {
           : undefined;
         const sales = plan.sales?.on ? await readState(swell, "sales") : undefined;
         const sweep = await readState(swell, "sweep");
-        // A search not read to its end goes on in the next round
-        const searching = Boolean(sales?.requested === true || sales?.search || sales?.past);
+        // A search not read to its end, or sales not yet imported, go on in the next round
+        const searching = Boolean(sales?.requested === true || sales?.search || sales?.past) || importing;
         if ((marked?.count || 0) === 0 && !searching && sweep?.requested !== true) {
           return { again: false };
         }

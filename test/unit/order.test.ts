@@ -95,6 +95,25 @@ describe("a Square sale as a Swell order", () => {
     expect(swellTotal(order)).toBe(20);
   });
 
+  it("puts back a tax that is part of the prices where Square leaves it out of the gross sales (US, Canada, Japan)", () => {
+    const jpy = (amount: number) => ({ amount, currency: "JPY" });
+    const line = { ...cardSale.line_items[0], quantity: "2", gross_sales_money: jpy(2000), total_tax_money: jpy(200), total_discount_money: jpy(0), total_money: jpy(2200) };
+    const order = built({
+      ...cardSale,
+      line_items: [{ ...line, applied_taxes: [{ tax_uid: "ct", applied_money: jpy(200) }] }],
+      taxes: [{ uid: "ct", name: "Consumption tax", percentage: "10", type: "INCLUSIVE", applied_money: jpy(200) }],
+      total_tax_money: jpy(200),
+      total_discount_money: jpy(0),
+      total_tip_money: jpy(0),
+      total_money: jpy(2200),
+    });
+
+    expect(order.currency).toBe("JPY");
+    expect(order.item_tax_included).toBe(true);
+    expect(order.items[0]).toMatchObject({ quantity: 2, price: 1100, taxes: [{ id: "square-ct", amount: 200 }] });
+    expect(swellTotal(order)).toBe(2200);
+  });
+
   it("adds a tip, a service charge and cash rounding so that the total is what was paid", () => {
     const order = built({
       ...cardSale,

@@ -30,6 +30,8 @@ export interface Step {
   message: string;
   /** When the quantities were read that the step was decided from */
   read: string;
+  /** The Swell stock location the step was decided for */
+  swell_location?: string | null;
 }
 
 export interface StockContext {
@@ -266,6 +268,17 @@ async function finish(ctx: StockContext, work: Work[], outcome: Outcome): Promis
 
 /** Steps that an earlier run wrote down and did not finish */
 async function repeat(ctx: StockContext, links: Link[], outcome: Outcome): Promise<void> {
+  // A step decided for another Swell location would change this one's stock
+  const moved = links.filter((link) => ((link.step as Step).swell_location ?? null) !== (ctx.swellLocation || null));
+  for (const link of moved) {
+    await stop(
+      ctx,
+      link,
+      "The Swell stock location set under Inventory changed while a change of this item was being passed on. Start the item again and say which side has the right quantity.",
+      outcome,
+    );
+  }
+  links = links.filter((link) => !moved.includes(link));
   if (links.length === 0) {
     return;
   }
@@ -333,8 +346,9 @@ async function compare(ctx: StockContext, links: Link[], outcome: Outcome): Prom
     }
     const counted = counts.get(link.variation_id);
     let square = wholeQuantity(counted);
-    if (counted === undefined && starting && link.start === "swell") {
-      // Never counted in Square: the first count is what Swell has
+    if (counted === undefined && ((starting && link.start === "swell") || link.agreed === 0)) {
+      // Never counted in Square: the first count is what Swell has. A pair started at zero
+      // stays uncounted until a change is sent, and reading zero for it gives Swell nothing
       square = 0;
     }
     if (counted === undefined && square === undefined) {
@@ -411,6 +425,7 @@ async function compare(ctx: StockContext, links: Link[], outcome: Outcome): Prom
       reason: words.reason,
       message: words.message,
       read,
+      swell_location: ctx.swellLocation || null,
     };
     await save(ctx.swell, link, { step, seq: step.seq, pending: true });
     work.push({ link, step, sent: false });

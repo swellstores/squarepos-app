@@ -110,6 +110,17 @@ describe("matching products by SKU", () => {
     expect(second?.reason).toContain("another Square item");
   });
 
+  it("links the items of a new Square location although the old location's items still name the products", async () => {
+    const mug = store.addProduct("MUG", 4);
+    square.addItem("Mug", [{ id: "V1", sku: "MUG", count: 6 }]);
+    // Started at another location, then stopped when the location setting changed
+    store.links.push({ id: store.nextId(), key: "OLD:V1", sku: "MUG", location_id: "OLD", variation_id: "V1", product_id: mug.id, variant_id: null, status: "error", agreed: 6 });
+
+    await match();
+
+    expect(store.links.find((record) => record.location_id === LOCATION)).toMatchObject({ status: "ready", product_id: mug.id });
+  });
+
   it("forgets an item that was deleted in Square, and stops its sync if it had one", async () => {
     store.addProduct("MUG", 4);
     store.addProduct("CAP", 2);

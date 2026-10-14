@@ -149,9 +149,10 @@ async function recordRefunds(ctx: SalesContext, orderId: string, refunds: Refund
   return undefined;
 }
 
-/** Records the refunds of a Square refund order on the sales they pay back. Returns how many sales changed */
-export async function applyRefunds(ctx: SalesContext, order: Row): Promise<number> {
+/** Records the refunds of a Square refund order on the sales they pay back. Returns how many sales changed, and how many of them failed */
+export async function applyRefunds(ctx: SalesContext, order: Row): Promise<{ changed: number; failed: number }> {
   let changed = 0;
+  let failed = 0;
   for (const [saleKey, refunds] of refundsBySale(order)) {
     const sale = await findSale(ctx.swell, saleKey);
     if (!sale) {
@@ -174,8 +175,9 @@ export async function applyRefunds(ctx: SalesContext, order: Row): Promise<numbe
     // A refund the store refuses lists the sale; Retry records it once the cause is gone
     await saveSale(ctx.swell, sale, { ...merged, ...(problem ? { status: "failed", problem } : {}) });
     changed += 1;
+    failed += problem ? 1 : 0;
   }
-  return changed;
+  return { changed, failed };
 }
 
 /* Finding sales */
@@ -184,6 +186,8 @@ export interface Found {
   /** Sales recorded as waiting for their import */
   sales: number;
   refunds: number;
+  /** Sales whose refunds the store refused: listed under Needs attention */
+  failed: number;
   /** Square's cursor to the next page */
   cursor?: string;
 }
@@ -196,12 +200,14 @@ function before(order: Row, from: string | undefined): boolean {
 
 /** Reads one page of the completed orders of up to ten locations changed in a time range, and records what it finds */
 export async function findSales(ctx: SalesContext, locationIds: string[], from: string, until: string, cursor?: string): Promise<Found> {
-  const found: Found = { sales: 0, refunds: 0 };
+  const found: Found = { sales: 0, refunds: 0, failed: 0 };
   const page = await searchOrders(ctx.api, locationIds, from, until, cursor);
   for (const order of page.orders) {
     const kind = kindOf(order);
     if (kind === "refund") {
-      found.refunds += await applyRefunds(ctx, order);
+      const applied = await applyRefunds(ctx, order);
+      found.refunds += applied.changed;
+      found.failed += applied.failed;
     } else if ((kind === "sale" || kind === "exchange") && !before(order, ctx.from)) {
       const { created } = await claimSale(ctx.swell, order.id, describeSale(order, undefined, locationName(ctx, order.location_id)));
       found.sales += created ? 1 : 0;
@@ -333,6 +339,7 @@ export async function importSale(ctx: SalesContext, sale: Sale): Promise<Importe
 
   // An earlier attempt may have created the order and stopped before the record said so
   let created = (await ctx.swell.get(`/orders/${id}`, { fields: "number,grand_total,currency,account_id" })) as Row | "" | null;
+  const fresh = !created;
   if (!created) {
     const number = payment?.receipt_number ? `SQ-${payment.receipt_number}` : `SQ-${String(order.id).slice(0, 8)}`;
     const built = buildOrder(order, {
@@ -358,6 +365,20 @@ export async function importSale(ctx: SalesContext, sale: Sale): Promise<Importe
       return fail(ctx, sale, "failed", `Swell did not accept the order. ${errors || "No order was returned."}`, details);
     }
     created = result;
+  }
+
+  // A currency the store only displays is replaced by its own one, the amounts kept: the
+  // order would claim the receipt's numbers in another currency
+  const kept = String(created.currency || currency).toUpperCase();
+  if (kept !== currency.toUpperCase()) {
+    const cause = `Swell records this sale's order in ${kept}, at the amounts of the ${currency} receipt, since ${currency} has no prices of its own in this store.`;
+    if (!fresh) {
+      // Found from an earlier attempt: it may hold money already, so it is left for the merchant
+      return fail(ctx, sale, "failed", `${cause} Correct or delete order ${created.number} by hand, then mark this sale as resolved.`, { ...details, order_id: created.id });
+    }
+    // Created just now, without a payment. Whoever was told of it is told it is gone
+    await ctx.swell.delete(`/orders/${created.id}`, ctx.announce ? { $events: true } : undefined);
+    return fail(ctx, sale, "failed", `${cause} It is not imported. Record it by hand, then mark it as resolved.`, { ...details, order_id: null });
   }
 
   // The money: Square's payments, and what it refunded so far. Repeated, nothing doubles

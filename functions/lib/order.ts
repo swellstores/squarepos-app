@@ -181,7 +181,18 @@ export function buildOrder(order: Sq, context: OrderContext): Built {
 
   const lines: Line[] = [];
   for (const item of (order.line_items || []) as Sq[]) {
-    const gross = minor(item.gross_sales_money);
+    const discounted = minor(item.total_discount_money);
+    const appliedTax = (kind: string) =>
+      ((item.applied_taxes || []) as Sq[])
+        .filter((tax) => (taxKinds.get(tax.tax_uid) || "ADDITIVE") === kind)
+        .reduce((all, tax) => all + minor(tax.applied_money), 0);
+    const inclusive = appliedTax("INCLUSIVE");
+    let gross = minor(item.gross_sales_money);
+    // In the US, Canada and Japan, Square leaves a tax that is part of the price out of the
+    // gross sales; the line's total has it. Elsewhere the gross sales keep it
+    if (inclusive > 0 && item.total_money && gross - discounted + appliedTax("ADDITIVE") + minor(item.total_service_charge_money) + inclusive === minor(item.total_money)) {
+      gross += inclusive;
+    }
     const quantity = wholeQuantity(item.quantity);
     const name = lineName(item);
     // Swell multiplies a unit price by a whole quantity. Where that cannot give Square's
@@ -190,7 +201,6 @@ export function buildOrder(order: Sq, context: OrderContext): Built {
     const applied = ((item.applied_discounts || []) as Sq[])
       .filter((discount) => minor(discount.applied_money) !== 0)
       .map((discount) => ({ id: `square-${discount.discount_uid}`, amount: minor(discount.applied_money) }));
-    const discounted = minor(item.total_discount_money);
     lines.push({
       description: divides ? name : `${item.quantity} × ${name}`,
       product_name: (item.name || "").trim() || "Custom amount",

@@ -152,11 +152,15 @@ export async function matchItems(ctx: MatchContext, items: Row[]): Promise<Match
   const records = new Map<string, Row>((known?.results || []).map((record) => [record.key, record]));
   const others = (sameSku?.results || []).filter((record) => !records.has(record.key));
   // Items that hold a Swell product or variant already, under another Square variation (one
-  // whose SKU changed since it was started, for example): one Swell stock has one partner
+  // whose SKU changed since it was started, for example): one Swell stock has one partner.
+  // Items of another Square location hold nothing: the sync passes them by
   const targetIds = [...new Set([...targets.values()].flat().map((target) => ("product_id" in target ? target.product_id : "")).filter(Boolean))];
   const holders =
     targetIds.length > 0
-      ? (((await ctx.swell.get("/items", { where: { product_id: { $in: targetIds }, status: { $in: ["active", "error", "ready"] } }, limit: 1000 })) as Page)?.results || [])
+      ? (((await ctx.swell.get("/items", {
+          where: { product_id: { $in: targetIds }, location_id: ctx.locationId, status: { $in: ["active", "error", "ready"] } },
+          limit: 1000,
+        })) as Page)?.results || [])
       : [];
   const heldBy = (key: string, decided: Row) =>
     holders.find((holder) => holder.key !== key && holder.product_id === decided.product_id && (holder.variant_id || null) === (decided.variant_id || null));

@@ -86,7 +86,7 @@ Each completed Square sale at the chosen locations becomes one Swell order.
 - **Refunds.** A refund made in Square is recorded as a refund of the order's Square POS payment, so the order shows as partly refunded or refunded. A refund of a sale that was not imported is left out. Stock follows Square's count when the goods are restocked there.
 - **Not imported:** exchanges (a sale and returned items on one receipt), and sales that an online checkout took through Square's payment API, since that checkout keeps its own orders. Both are listed under **Skipped** with the reason.
 - **How fast.** A sale usually arrives within half a minute of its payment. The five-minute comparison also looks for sales whose notice was lost.
-- **Where it starts.** Sales completed before the import was switched on stay out, also when they are refunded later. Switching the import off and on again starts it anew from that moment: the sales made while it was off stay out too. **Import past sales** brings them in from a date you choose; a long period is read in the background over several minutes, and a sale imported before is never imported twice.
+- **Where it starts.** Sales completed before the import was switched on stay out, also when they are refunded later. Switching the import off and on again starts it anew from that moment: the sales made while it was off stay out too. **Import past sales** brings them in from a date you choose; a long period is imported in the background a part at a time, with the stock sync going on in between, and a sale imported before is never imported twice.
 
 Where: Orders → Square sales; the **Square POS** tab on every order (receipt number, location, how it was paid, what was refunded, the Square order ID and a receipt link); the **Square POS** tab in the order list. Implemented by `functions/square-events.ts` (Square's `payment.*` and `refund.*` notices), `functions/sweep.ts` and the `sync` workflow.
 
@@ -148,6 +148,8 @@ The buttons start a run in the background; the lists show its result a few secon
 - **No catalog sync.** Products are not created or changed on either side. Items are linked by the SKUs you keep.
 - **One location for stock.** Sales can be imported from any number of locations.
 - **Whole quantities.** Items sold by weight or measure are not linked. On an imported order such a line is one unit with the amount Square charged.
+- **Taxes included in the price and taxes added on top in one sale.** Only the added taxes are listed on the order; the included ones stay in the prices. The total is Square's.
+- **One currency.** Orders are imported in the currency of the Square location. When the store only shows that currency without prices of its own, Swell would record the order in the store's currency at the receipt's numbers: such sales are listed under Needs attention instead of imported.
 - **Refunds are amounts.** Returns by item and exchanges are not mirrored on the order. As for any refund in Swell that returns no items, a partly refunded order shows the refunded amount as a balance.
 - **A refund is recorded when Square has it**, also while Square still shows it as pending (cash refunds are; card refunds complete within days). A card refund that Square later reports as failed stays recorded on the order: correct it by hand.
 - **Imported orders are not linked to products** (see "No stock is taken").

@@ -136,6 +136,39 @@ describe("importing sales", () => {
     expect(failed.problem).toContain("99.99 USD");
   });
 
+  it("does not import a sale that the store would keep in another currency", async () => {
+    // USD only displayed in a EUR store: the store keeps the order in EUR at the receipt's numbers
+    const original = store.swell.post.getMockImplementation()!;
+    store.swell.post.mockImplementation((path, body) => original(path, path === "/orders" ? { ...body, currency: "EUR" } : body));
+    square.orders.push(cashSale);
+
+    await run({ announce: true });
+
+    expect(store.sales[0]).toMatchObject({ status: "failed", order_id: null });
+    expect(store.sales[0].problem).toContain("in EUR");
+    expect(store.orders).toHaveLength(0);
+    expect(store.payments).toHaveLength(0);
+    // Other apps were told of the order: they are told it is gone
+    expect(store.swell.delete).toHaveBeenCalledWith(expect.stringMatching(/^\/orders\//), { $events: true });
+  });
+
+  it("leaves an order of an earlier attempt in another currency to the merchant, with its payments", async () => {
+    square.orders.push(cashSale);
+    await run();
+    const order = store.orders[0];
+    // As an earlier version of the app left it: kept in EUR, and paid
+    order.currency = "EUR";
+    store.sales[0].status = "pending";
+
+    await run();
+
+    expect(store.sales[0]).toMatchObject({ status: "failed", order_id: order.id });
+    expect(store.sales[0].problem).toContain(`Correct or delete order ${order.number}`);
+    expect(store.orders).toEqual([order]);
+    expect(store.payments.length).toBeGreaterThan(0);
+    expect(store.swell.delete.mock.calls.some(([path]) => path === `/orders/${order.id}`)).toBe(false);
+  });
+
   it("leaves out a sale taken by an online checkout through Square's API, except in the sandbox", async () => {
     square.orders.push(cardSale);
 

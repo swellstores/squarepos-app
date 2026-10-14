@@ -86,6 +86,24 @@ describe("starting a pair", () => {
     ]);
   });
 
+  it("keeps an item Square never counted in sync when it is started from Swell at zero", async () => {
+    const product = store.addProduct("CAP", 0);
+    square.addItem("Cap", [{ id: "V2", sku: "CAP" }]);
+    pair(product, "V2", { start: "swell" });
+
+    await sync();
+    await sync();
+    expect(store.links[0]).toMatchObject({ status: "active", agreed: 0 });
+
+    store.adjust(product, 4, "received");
+    await later();
+    await sync();
+
+    expect(store.links[0]).toMatchObject({ status: "active", agreed: 4 });
+    expect(square.count("V2")).toBe(4);
+    expect(store.level(product)).toBe(4);
+  });
+
   it("does not take a missing count for zero", async () => {
     const product = store.addProduct("CAP", 7);
     square.addItem("Cap", [{ id: "V2", sku: "CAP" }]);
@@ -321,6 +339,26 @@ describe("where the stock is kept", () => {
     expect(outcome.stopped).toBe(1);
     expect(square.count("V1")).toBe(5);
     expect(store.stock).toHaveLength(2);
+  });
+
+  it("stops a pair whose interrupted step was for another Swell location, and changes neither location", async () => {
+    const product = store.addProduct("TEE", 10, { location: "shop" });
+    store.adjust(product, 100, "received", "warehouse");
+    square.addItem("Tee", [{ id: "V1", sku: "TEE", count: 10 }]);
+    pair(product, "V1", { agreed: 10, swell_location: "shop" });
+    square.sell("V1", 1);
+    // The step for the shop is written, and the run stops before Swell has its part
+    store.failures.push({ when: (method, path) => method === "post" && path === "/products:stock", error: new Error("store unavailable") });
+    await expect(sync({ swellLocation: "shop" })).rejects.toThrow("store unavailable");
+    expect(store.links[0].pending).toBe(true);
+
+    // The merchant chose the warehouse meanwhile
+    const outcome = await sync({ swellLocation: "warehouse" });
+
+    expect(outcome.stopped).toBe(1);
+    expect(store.links[0]).toMatchObject({ status: "error", swell_location: "shop" });
+    expect(store.products[0].stock_locations).toEqual({ shop: { stock_level: 10 }, warehouse: { stock_level: 100 } });
+    expect(square.count("V1")).toBe(9);
   });
 
   it("leaves the pairs it has no time for untouched", async () => {

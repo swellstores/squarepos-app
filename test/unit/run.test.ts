@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { takeClaim } from "../../functions/lib/claim";
 import { run } from "../../functions/lib/run";
-import { cardPayment, cardSale, cashSale } from "../fixtures/square-orders";
+import { cardPayment, cardSale, cashSale, refundOrder } from "../fixtures/square-orders";
+import type { Steps } from "../../functions/lib/run";
 import { createSteps, runRequest } from "../helpers/request";
 import { createSquare } from "../helpers/square";
 import type { TestSquare } from "../helpers/square";
@@ -191,6 +192,28 @@ describe("one run at a time", () => {
     expect(state("run")).toBeUndefined();
   });
 
+  it("leaves the stock alone once the sync is switched off after the run began", async () => {
+    const { steps } = createSteps();
+    const switching: Steps = {
+      ...steps,
+      async do(name, options, work) {
+        const result = await steps.do(name, options, work);
+        if (name === "prepare") {
+          store.settings.inventory.enabled = false;
+        }
+        return result;
+      },
+    };
+
+    const result = await run(runRequest(store, { source: "square" }), switching);
+
+    expect(result.stock).toContain("settings changed");
+    expect(store.level(store.products[0])).toBe(6);
+    expect(square.count("V1")).toBe(5);
+    expect(link("MUG").marked).toBe(true);
+    expect(state("run")).toBeUndefined();
+  });
+
   it("gives back the claim the starting function took when Square cannot be reached at all", async () => {
     await takeClaim(store.swell, "claim-1");
     square.intercept((call) => (call.path === "/merchants/me" ? square.unavailable() : undefined));
@@ -261,6 +284,54 @@ describe("sales in a run", () => {
 
     expect(store.sales[0].status).toBe("imported");
     expect(store.alerts).toHaveLength(0);
+  });
+
+  it("raises the alert when the store refuses a refund the search found", async () => {
+    store.settings.sales.enabled_at = "2026-10-13T00:00:00.000Z";
+    store.state.push({ id: store.nextId(), key: "sales", enabled_at: "2026-10-13T00:00:00.000Z", cursor: "2026-10-13T00:00:00.000Z", requested: true });
+    square.orders.push(cardSale);
+    await start({ source: "square" });
+    expect(store.sales[0].status).toBe("imported");
+
+    // More than the payment of 20.00: the store refuses it
+    const now = new Date().toISOString();
+    square.orders.push({
+      ...refundOrder,
+      id: "too-much",
+      updated_at: now,
+      refunds: [{ ...refundOrder.refunds[0], id: "R9", amount_money: { amount: 3000, currency: "USD" } }],
+    });
+    await start({ source: "sweep", full: true }, "function", "run-2");
+
+    expect(store.sales[0].status).toBe("failed");
+    expect(store.alerts.map((alert) => alert.key)).toEqual(["sales"]);
+  });
+
+  it("imports a long list of sales a few at a time, and syncs the stock in between", async () => {
+    const mug = store.addProduct("MUG", 6);
+    square.addItem("Mug", [{ id: "V1", sku: "MUG", count: 6 }]);
+    store.links.push({ id: store.nextId(), key: `${LOCATION}:V1`, sku: "MUG", location_id: LOCATION, variation_id: "V1", product_id: mug.id, variant_id: null, status: "active", agreed: 6, marked: false });
+    const minuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
+    for (let index = 0; index < 45; index += 1) {
+      square.orders.push({ ...cashSale, id: `sale-${index}`, closed_at: minuteAgo, updated_at: minuteAgo });
+    }
+    // The till sells while the first sales are imported
+    let sold = false;
+    square.intercept((call) => {
+      if (!sold && call.path.startsWith("/orders/sale-")) {
+        sold = true;
+        square.sell("V1", 1);
+        link("MUG").marked = true;
+      }
+      return undefined;
+    });
+
+    const { names } = await start({ source: "sweep", full: true });
+
+    expect(names).not.toContain("import 1.4");
+    expect(names.indexOf("stock 2.1")).toBeLessThan(names.indexOf("import 2.1"));
+    expect(store.level(mug)).toBe(5);
+    expect(store.sales.filter((sale) => sale.status === "imported")).toHaveLength(45);
   });
 });
 
