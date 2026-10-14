@@ -49,6 +49,21 @@
       "label": "Sales imported from",
       "description": "Sales completed earlier are not imported, even when Square changes them later: the time the import was switched on, or the date of Import past sales."
     },
+    "enabled_at": {
+      "type": "date",
+      "label": "Import switched on",
+      "description": "The enable boundary applied by the workflow. A new boundary in the settings starts a new search, without other functions changing search progress."
+    },
+    "search": {
+      "type": "object",
+      "label": "Search for new sales",
+      "description": "A search of Square's orders that has not been read to its end: its time range, locations and Square's cursor."
+    },
+    "past": {
+      "type": "object",
+      "label": "Search for past sales",
+      "description": "The search started by Import past sales, while it has not been read to its end."
+    },
     "requested": {
       "type": "bool",
       "label": "Search requested",

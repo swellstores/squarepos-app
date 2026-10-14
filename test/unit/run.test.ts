@@ -34,8 +34,17 @@ async function start(data: Row = {}, trigger: "function" | "action" = "function"
 const state = (key: string) => store.state.find((record) => record.key === key);
 const link = (sku: string) => store.links.find((record) => record.sku === sku) as Row;
 
+/** The platform computes the hidden date fields as part of each settings write. */
+async function saveSettings(values: Row, at: string) {
+  const previous = structuredClone(store.settings);
+  const data = { ...previous, ...values, sales: { ...previous.sales, ...values.sales }, date_updated: at };
+  data.sales.enabled_at = data.sales.enabled ? data.sales.enabled_at || at : null;
+  store.settings = data;
+}
+
 beforeEach(() => {
   store = createStore({ settings: structuredClone(SETTINGS) });
+  store.settings.sales.enabled_at = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   square = createSquare({ locations: [{ id: LOCATION, name: "Main Street", status: "ACTIVE" }] });
   square.payments.push(cardPayment);
   store.addPaymentMethod();
@@ -43,6 +52,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("from matching to a shared stock", () => {
@@ -201,7 +211,7 @@ describe("one run at a time", () => {
 });
 
 describe("sales in a run", () => {
-  it("imports from about the moment the import is switched on, and from an earlier date on request", async () => {
+  it("imports from the saved enable boundary, and from an earlier date on request", async () => {
     square.orders.push(cashSale, cardSale);
     const minuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
     square.orders.push({ ...cashSale, id: "recent-sale", closed_at: minuteAgo, updated_at: minuteAgo });
@@ -222,20 +232,24 @@ describe("sales in a run", () => {
   });
 
   it("searches when Square announced a payment, and moves on to where it got", async () => {
-    store.state.push({ id: store.nextId(), key: "sales", cursor: "2026-10-13T00:00:00.000Z", requested: true });
+    store.settings.sales.enabled_at = "2026-10-13T00:00:00.000Z";
+    store.state.push({ id: store.nextId(), key: "sales", enabled_at: "2026-10-13T00:00:00.000Z", cursor: "2026-10-13T00:00:00.000Z", requested: true });
     square.orders.push(cashSale, cardSale);
 
     await start({ source: "square" });
     await start({ source: "square" }, "function", "run-2");
 
     expect(store.orders).toHaveLength(2);
-    expect(state("sales")).toMatchObject({ cursor: cardSale.updated_at, requested: false });
+    // Read to its end: the next search starts where this one ended
+    expect(state("sales")).toMatchObject({ requested: false, search: null });
+    expect(state("sales")!.cursor > cardSale.updated_at).toBe(true);
     // The second run had nothing announced, and did not ask Square
     expect(square.requests("/orders/search")).toHaveLength(1);
   });
 
   it("raises one alert for sales that need attention, retries them on request, and settles the alert", async () => {
-    store.state.push({ id: store.nextId(), key: "sales", cursor: "2026-10-13T00:00:00.000Z", requested: true });
+    store.settings.sales.enabled_at = "2026-10-13T00:00:00.000Z";
+    store.state.push({ id: store.nextId(), key: "sales", enabled_at: "2026-10-13T00:00:00.000Z", cursor: "2026-10-13T00:00:00.000Z", requested: true });
     square.orders.push({ ...cashSale, total_money: { amount: 9999, currency: "USD" } });
     await start({ source: "square" });
 
@@ -250,9 +264,109 @@ describe("sales in a run", () => {
   });
 });
 
+describe("where the sales search starts and how far it gets", () => {
+  const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60 * 1000).toISOString();
+
+  it("starts when the import was switched on, and anew after it was switched off", async () => {
+    store.settings = { ...SETTINGS, sales: { enabled: false } };
+    await saveSettings({ sales: { enabled: true } }, minutesAgo(30));
+    square.orders.push(
+      { ...cashSale, id: "before-on", closed_at: minutesAgo(31), updated_at: minutesAgo(31) },
+      // Completed while Square could not be reached: the first search came twenty minutes later
+      { ...cashSale, id: "after-on", closed_at: minutesAgo(25), updated_at: minutesAgo(25) },
+    );
+    await start({ source: "sweep", full: true });
+    expect(store.sales.map((sale) => sale.key)).toEqual(["after-on"]);
+
+    await saveSettings({ sales: { enabled: false } }, minutesAgo(15));
+    await start({ source: "sweep", full: true }, "function", "run-2");
+    square.orders.push({ ...cashSale, id: "while-off", closed_at: minutesAgo(10), updated_at: minutesAgo(10) });
+
+    await saveSettings({ sales: { enabled: true } }, minutesAgo(5));
+    square.orders.push({ ...cashSale, id: "on-again", closed_at: minutesAgo(4), updated_at: minutesAgo(4) });
+    await start({ source: "sweep", full: true }, "function", "run-3");
+    expect(store.sales.map((sale) => sale.key)).toEqual(["after-on", "on-again"]);
+  });
+
+  it("excludes sales during an off/on cycle that no sweep or notice observed", async () => {
+    await start({ full: true });
+    const at = minutesAgo(2);
+    await saveSettings({ sales: { enabled: false } }, minutesAgo(4));
+    square.orders.push({ ...cashSale, id: "while-off", closed_at: minutesAgo(3), updated_at: minutesAgo(3) });
+    await saveSettings({ sales: { enabled: true } }, at);
+    square.orders.push({ ...cashSale, id: "after-reenable", closed_at: minutesAgo(1), updated_at: minutesAgo(1) });
+
+    await start({ full: true }, "function", "run-2");
+
+    expect(store.sales.map((sale) => sale.key)).toEqual(["after-reenable"]);
+    expect(state("sales")?.date_from).toBe(at);
+  });
+
+  it("keeps the enable boundary through later saves and a failed first connection", async () => {
+    store.settings = { ...SETTINGS, sales: { enabled: false }, connection: { ...SETTINGS.connection, access_token: "wrong" } };
+    const at = minutesAgo(30);
+    await saveSettings({ sales: { enabled: true } }, at);
+    square.orders.push({ ...cashSale, id: "during-outage", closed_at: minutesAgo(25), updated_at: minutesAgo(25) });
+    await start({ full: true });
+    await saveSettings({ connection: SETTINGS.connection }, minutesAgo(5));
+
+    await start({ full: true }, "function", "run-2");
+
+    expect(store.sales.map((sale) => sale.key)).toEqual(["during-outage"]);
+    expect(state("sales")?.date_from).toBe(at);
+  });
+
+  it("names a missing start time instead of guessing one from the latest save", async () => {
+    store.settings = { ...SETTINGS, date_updated: minutesAgo(5) };
+
+    await start({ full: true });
+
+    expect(square.requests("/orders/search")).toHaveLength(0);
+    expect(store.alerts).toEqual([expect.objectContaining({ key: "connection", message: expect.stringContaining("no start time") })]);
+  });
+
+  it("searches every location, ten at a time", async () => {
+    const locations = Array.from({ length: 12 }, (_, index) => ({ id: `L${index}`, name: `Shop ${index}`, status: "ACTIVE" }));
+    square = createSquare({ locations });
+    square.payments.push(cardPayment);
+    square.orders.push({ ...cashSale, id: "at-twelfth", location_id: "L11", closed_at: minutesAgo(1), updated_at: minutesAgo(1) });
+
+    await start({ source: "sweep", full: true });
+
+    expect(store.sales.map((sale) => [sale.key, sale.status])).toEqual([["at-twelfth", "imported"]]);
+  });
+
+  it("goes on with a search where it stopped, in the next run, without skipping orders of one time", async () => {
+    // More past sales changed at the same moment than one run reads, a page of two per step
+    const moment = "2026-10-13T12:00:00.000Z";
+    for (let index = 0; index < 70; index += 1) {
+      square.orders.push({ ...cashSale, id: `past-${index}`, closed_at: moment, updated_at: moment });
+    }
+    const real = Date.now.bind(Date);
+    let offset = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => real() + offset);
+    square.intercept((call) => {
+      if (call.path === "/orders/search") {
+        // Each page takes the step's whole time
+        offset += 41 * 1000;
+      }
+      return undefined;
+    });
+
+    await start(action("import-past", { settings: "sales" }, { since: "2026-10-13T00:00:00.000Z" }), "action");
+    expect(state("sales")?.past).toMatchObject({ group: 0, page: expect.any(String) });
+    for (let run = 2; !store.sales.every((sale) => sale.status === "imported") || state("sales")?.past; run += 1) {
+      expect(run).toBeLessThan(10);
+      await start({ source: "sweep", full: true }, "function", `run-${run}`);
+    }
+
+    expect(store.sales).toHaveLength(70);
+  });
+});
+
 describe("when Square says no", () => {
   it("raises the connection alert for a refused token, does nothing else, and clears it when the token works", async () => {
-    store.settings = { ...SETTINGS, connection: { access_token: "wrong" } };
+    store.settings.connection = { ...SETTINGS.connection, access_token: "wrong" };
     await takeClaim(store.swell, "claim-1");
 
     const { result } = await start({ source: "sweep", full: true, claim: "claim-1" });
@@ -261,7 +375,7 @@ describe("when Square says no", () => {
     expect(store.alerts.map((alert) => alert.key)).toEqual(["connection"]);
     expect(state("run")).toBeUndefined();
 
-    store.settings = structuredClone(SETTINGS);
+    store.settings.connection = structuredClone(SETTINGS.connection);
     await start({ source: "sweep", full: true }, "function", "run-2");
 
     expect(store.alerts).toHaveLength(0);

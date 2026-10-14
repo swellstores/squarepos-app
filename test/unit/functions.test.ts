@@ -185,6 +185,20 @@ describe("a stock change in Swell", () => {
 });
 
 describe("the sweep", () => {
+  it("leaves initialization and backfill progress to the workflow even with overlapping observers", async () => {
+    const past = { from: "2026-10-01T00:00:00.000Z", until: "2026-10-14T10:00:00.000Z", locations: LOCATION, group: 0, page: "2" };
+    const progress = { id: store.nextId(), key: "sales", cursor: past.until, date_from: past.from, past };
+    store.state.push(structuredClone(progress));
+    await takeClaim(store.swell, "working-run");
+
+    await Promise.all([sweep(createRequest(store)), testConnection(createRequest(store))]);
+    await squareEvents(await notice({ type: "payment.updated", data: { object: { payment: { id: "P1" } } } }));
+
+    expect(store.state.find((record) => record.key === "sales")).toEqual({ ...progress, requested: true });
+    const writes = store.swell.put.mock.calls.filter(([path]) => path === `/state/${progress.id}`);
+    expect(writes.every(([, body]) => Object.keys(body).every((key) => key === "requested"))).toBe(true);
+  });
+
   it("starts a full comparison every time, unless a run is working or nothing is switched on", async () => {
     await sweep(createRequest(store));
     expect(store.runs[0].data).toMatchObject({ source: "sweep", full: true });

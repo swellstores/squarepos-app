@@ -20,6 +20,8 @@ export interface Settings {
   };
   sales?: {
     enabled?: boolean | null;
+    /** Computed in the settings write: set on enable, preserved while on, cleared while off */
+    enabled_at?: string | null;
     /** Names of the Square locations whose sales are imported, separated by commas. Empty: all of them */
     locations?: string | null;
     /** Lets other apps and webhooks react to imported orders */

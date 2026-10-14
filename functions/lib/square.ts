@@ -309,11 +309,12 @@ export async function changeInventory(
 
 /* Orders */
 
-/** Completed orders of the locations, oldest change first, from a time on */
+/** Completed orders of at most ten locations, oldest change first, changed in a time range */
 export async function searchOrders(
   api: Api,
   locationIds: string[],
   updatedFrom: string,
+  updatedTo: string,
   cursor?: string,
 ): Promise<{ orders: Record<string, any>[]; cursor?: string }> {
   const data = await call(api, "POST", "/orders/search", {
@@ -323,7 +324,7 @@ export async function searchOrders(
     query: {
       filter: {
         state_filter: { states: ["COMPLETED"] },
-        date_time_filter: { updated_at: { start_at: updatedFrom } },
+        date_time_filter: { updated_at: { start_at: updatedFrom, end_at: updatedTo } },
       },
       sort: { sort_field: "UPDATED_AT", sort_order: "ASC" },
     },

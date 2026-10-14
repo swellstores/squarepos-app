@@ -19,6 +19,7 @@ import type { Page, Settings, StoreClient } from "./settings";
 import { SquareError, getMerchant, listItems, listLocations } from "./square";
 import type { Api } from "./square";
 import { readState, writeState } from "./state";
+import type { StateRecord } from "./state";
 import { syncLinks } from "./stock";
 import type { Link, StockContext } from "./stock";
 
@@ -67,7 +68,10 @@ const MARKED_BATCH = 40;
 const FULL_BATCH = 100;
 const SALES_BATCH = 10;
 const SEARCH_OVERLAP_MS = 2 * 60 * 1000;
-const FIRST_SEARCH_BACK_MS = 10 * 60 * 1000;
+/** Steps a search takes in one round before the rest of the round's work: the next round or run goes on with it */
+const SEARCH_STEPS = 10;
+/** Square searches the orders of at most ten locations at a time */
+const SEARCH_GROUP = 10;
 
 interface Plan {
   /** Why nothing can be done at all */
@@ -142,6 +146,10 @@ async function prepare(swell: StoreClient): Promise<Plan> {
     }
   } else if (resolved.sales.length > 0) {
     plan.sales = { locations: resolved.sales.map((location) => ({ id: location.id, name: location.name || location.id })), on: salesEnabled(settings) };
+  }
+  if (salesEnabled(settings) && !startTime(settings)) {
+    // Computed when the settings are saved: settings last saved before that have none, and a guessed start could leave sales out
+    problems.push("The sales import has no start time yet. Open the app's settings and save them once.");
   }
 
   if (problems.length > 0) {
@@ -280,41 +288,106 @@ function salesContext(req: RunRequest, plan: Plan, settings: Settings, api: Api)
   };
 }
 
-/** Looks through Square's completed orders from a time on. Returns the time to continue from */
-async function searchSales(req: RunRequest, step: Steps, owner: string, plan: Plan, from: string, name: string): Promise<{ lost?: boolean; refused?: boolean; last?: string }> {
-  let start = from;
-  let last: string | undefined;
-  for (let batch = 1; batch <= 100; batch += 1) {
-    const since = start;
+/**
+ * A search of Square's completed orders changed in a time range. It is kept in the app's
+ * state with Square's cursor, so that the search goes on where it stopped, in the next
+ * step or in the next run, and never skips an order. `search` is the search for new sales,
+ * `past` the one for Import past sales.
+ */
+interface Pass {
+  from: string;
+  until: string;
+  /** The Square locations searched (ids separated by commas), ten at a time, and the ten being read */
+  locations: string;
+  group: number;
+  /** Square's cursor to the next page of the ten being read */
+  page: string | null;
+}
+
+type PassKey = "search" | "past";
+
+/** When the sales import was switched on: computed by the settings save that switched it on */
+function startTime(settings: Settings): string | undefined {
+  const saved = settings.sales?.enabled_at;
+  return saved && Number.isFinite(new Date(saved).getTime()) ? new Date(saved).toISOString() : undefined;
+}
+
+/** Only the workflow, while holding the claim, initializes or resets search progress. */
+async function salesState(swell: StoreClient, settings: Settings): Promise<StateRecord | undefined> {
+  if (!salesEnabled(settings)) {
+    return undefined;
+  }
+  const state = await readState(swell, "sales");
+  const at = startTime(settings);
+  if (!at) {
+    // Named by prepare() in the connection alert
+    return undefined;
+  }
+  if (state?.enabled_at === at) {
+    return state;
+  }
+  // Switched on (again): the import starts from that save, and searches under way are dropped
+  return writeState(swell, "sales", { enabled_at: at, date_from: at, cursor: at, requested: true, search: null, past: null });
+}
+
+function newPass(plan: Plan, from: string, until: string): Pass {
+  return { from, until, locations: locationIds(plan), group: 0, page: null };
+}
+
+function locationIds(plan: Plan): string {
+  return plan
+    .sales!.locations.map((location) => location.id)
+    .sort()
+    .join(",");
+}
+
+/** Goes on with a search for some steps. `done` once it has read its range for every location */
+async function searchSales(req: RunRequest, step: Steps, owner: string, plan: Plan, key: PassKey, name: string): Promise<{ lost?: boolean; refused?: boolean; done?: boolean }> {
+  for (let batch = 1; batch <= SEARCH_STEPS; batch += 1) {
     const result = await step.do(`${name} ${batch}`, STEP, () =>
       guarded(req.swell, async () => {
         if (!(await holdsClaim(req.swell, owner))) {
           return { lost: true };
         }
         const { settings, api } = await load(req.swell);
-        const ctx = { ...salesContext(req, plan, settings, api), from: (await readState(req.swell, "sales"))?.date_from };
-        let cursor: string | undefined;
-        let seen: string | undefined;
+        const state = await salesState(req.swell, settings);
+        const saved = state?.[key] as Pass | null | undefined;
+        if (!saved) {
+          return { done: true };
+        }
+        const ctx = { ...salesContext(req, plan, settings, api), from: state?.date_from };
+        // Other locations chosen since the search began: it reads its range again for those
+        let pass: Pass = saved.locations === locationIds(plan) ? { ...saved } : { ...saved, locations: locationIds(plan), group: 0, page: null };
+        const ids = pass.locations.split(",");
         do {
-          const found = await findSales(ctx, since, cursor);
-          seen = found.last || seen;
-          cursor = found.cursor;
-        } while (cursor && Date.now() < ctx.deadline);
-        return { last: seen, more: Boolean(cursor) };
+          try {
+            const found = await findSales(ctx, ids.slice(pass.group * SEARCH_GROUP, (pass.group + 1) * SEARCH_GROUP), pass.from, pass.until, pass.page || undefined);
+            pass = found.cursor ? { ...pass, page: found.cursor } : { ...pass, group: pass.group + 1, page: null };
+          } catch (err) {
+            if (!(pass.page && err instanceof SquareError && err.kind === "refused")) {
+              throw err;
+            }
+            // A cursor kept from an earlier run that Square no longer takes: these ten are read again
+            pass = { ...pass, page: null };
+          }
+        } while (pass.group * SEARCH_GROUP < ids.length && Date.now() < ctx.deadline);
+        const done = pass.group * SEARCH_GROUP >= ids.length;
+        await writeState(req.swell, "sales", {
+          [key]: done ? null : pass,
+          // Read to its end for every location: the next search for new sales starts there
+          ...(done && key === "search" && !(state?.cursor && state.cursor >= pass.until) ? { cursor: pass.until } : {}),
+        });
+        return { done };
       }),
     );
     if (result.lost || refused(result)) {
-      return { lost: result.lost === true, refused: refused(result), last };
+      return { lost: result.lost === true, refused: refused(result) };
     }
-    last = result.last || last;
-    if (!result.more || !result.last) {
-      break;
+    if (result.done) {
+      return { done: true };
     }
-    // The next step continues at the last order's time. When a whole step saw one time
-    // only, it moves past it, or it would read the same orders for ever
-    start = result.last === since ? new Date(new Date(since).getTime() + 1).toISOString() : result.last;
   }
-  return { last };
+  return { done: false };
 }
 
 async function importWaiting(req: RunRequest, step: Steps, owner: string, plan: Plan, round: number): Promise<{ lost?: boolean; refused?: boolean; failed: number }> {
@@ -328,6 +401,9 @@ async function importWaiting(req: RunRequest, step: Steps, owner: string, plan: 
           return { lost: true };
         }
         const { settings, api } = await load(req.swell);
+        if (!salesEnabled(settings)) {
+          return { found: 0, failed: 0 };
+        }
         const page = (await req.swell.get("/sales", {
           where: { status: "pending", ...(cursor ? { id: { $gt: cursor } } : {}) },
           sort: "id asc",
@@ -577,43 +653,55 @@ export async function run(req: RunRequest, step: Steps): Promise<Row> {
       if (plan.sales?.on) {
         const since = round === 1 && job === "import-past" && typeof data.since === "string" && !Number.isNaN(new Date(data.since).getTime()) ? new Date(data.since).toISOString() : undefined;
         const todo = await step.do(`sales ${round}`, STEP, async () => {
-          const state = await readState(swell, "sales");
-          if (!state?.cursor) {
-            // Sales are imported from about the moment the import was switched on: the first run
-            // comes within minutes of it, and a sale made in between is not left out
-            const cursor = new Date(Date.now() - FIRST_SEARCH_BACK_MS).toISOString();
-            await writeState(swell, "sales", { cursor, date_from: since && since < cursor ? since : cursor, requested: false });
-            return { search: true, on: true, cursor };
+          if (!(await holdsClaim(swell, owner))) {
+            return { lost: true, on: false, search: false, past: false };
           }
-          if (since && (!state.date_from || new Date(since) < new Date(state.date_from))) {
-            await writeState(swell, "sales", { date_from: since });
+          const settings = ((await swell.settings()) || {}) as Settings;
+          const state = await salesState(swell, settings);
+          if (!state?.enabled_at) {
+            // Switched off since the run began, or missing a reliable boundary
+            return { on: false, search: false, past: false };
           }
-          const search = state.requested === true || full || job === "retry-sales" || job === "import-past";
-          if (state.requested === true) {
+          const now = new Date().toISOString();
+          const values: Row = {};
+          // A search under way ends where it began: a notice that came since waits for the next one
+          if (!state.search && (state.requested === true || full || job === "retry-sales" || job === "import-past")) {
+            // Square may list an order a moment after a later one: the search reaches back a little
+            values.search = newPass(plan, new Date(new Date(state.cursor || state.enabled_at).getTime() - SEARCH_OVERLAP_MS).toISOString(), now);
             // Taken off before the search: a notice that comes from now on is for the next one
-            await writeState(swell, "sales", { requested: false });
+            values.requested = false;
           }
-          return { search, on: true, cursor: state.cursor as string };
-        });
-        if (todo.on) {
           if (since) {
-            const past = await searchSales(req, step, owner, plan, since, "past sales");
-            if (past.lost || past.refused) {
-              summary.stopped = "The search for past sales was cut short.";
-              break;
+            // Up to now: the search for new sales goes on from its own cursor. A past search
+            // under way from an earlier date is begun again from that date
+            const past = state.past as Pass | null | undefined;
+            values.past = newPass(plan, past && past.from < since ? past.from : since, now);
+            if (!state.date_from || new Date(since) < new Date(state.date_from)) {
+              values.date_from = since;
             }
           }
-          if (todo.search && todo.cursor) {
-            // Square may list an order a moment after a later one: the search reaches back a little
-            const from = new Date(new Date(todo.cursor).getTime() - SEARCH_OVERLAP_MS).toISOString();
-            const found = await searchSales(req, step, owner, plan, from, `sales search ${round}`);
+          if (Object.keys(values).length > 0) {
+            await writeState(swell, "sales", values);
+          }
+          return { on: true, search: Boolean(state.search || values.search), past: Boolean(state.past || values.past) };
+        });
+        if (todo.lost) {
+          summary.stopped = "Another run took over.";
+          break;
+        }
+        if (todo.on) {
+          if (todo.search) {
+            const found = await searchSales(req, step, owner, plan, "search", `sales search ${round}`);
             if (found.lost || found.refused) {
               summary.stopped = "The search for sales was cut short.";
               break;
             }
-            if (found.last && found.last > todo.cursor) {
-              const last: string = found.last;
-              await step.do(`sales cursor ${round}`, STEP, async () => writeState(swell, "sales", { cursor: last }).then(() => ({})));
+          }
+          if (todo.past) {
+            const past = await searchSales(req, step, owner, plan, "past", `past sales ${round}`);
+            if (past.lost || past.refused) {
+              summary.stopped = "The search for past sales was cut short.";
+              break;
             }
           }
           const imported = await importWaiting(req, step, owner, plan, round);
@@ -635,7 +723,9 @@ export async function run(req: RunRequest, step: Steps): Promise<Row> {
           : undefined;
         const sales = plan.sales?.on ? await readState(swell, "sales") : undefined;
         const sweep = await readState(swell, "sweep");
-        if ((marked?.count || 0) === 0 && sales?.requested !== true && sweep?.requested !== true) {
+        // A search not read to its end goes on in the next round
+        const searching = Boolean(sales?.requested === true || sales?.search || sales?.past);
+        if ((marked?.count || 0) === 0 && !searching && sweep?.requested !== true) {
           return { again: false };
         }
         return { again: await takeClaim(swell, owner) };

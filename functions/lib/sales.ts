@@ -184,8 +184,7 @@ export interface Found {
   /** Sales recorded as waiting for their import */
   sales: number;
   refunds: number;
-  /** The change time of the last order on the page: the search continues from it */
-  last?: string;
+  /** Square's cursor to the next page */
   cursor?: string;
 }
 
@@ -195,16 +194,10 @@ function before(order: Row, from: string | undefined): boolean {
   return Boolean(from) && sold < new Date(from as string).getTime();
 }
 
-/** Reads one page of Square's completed orders from a time on, and records what it finds */
-export async function findSales(ctx: SalesContext, from: string, cursor?: string): Promise<Found> {
+/** Reads one page of the completed orders of up to ten locations changed in a time range, and records what it finds */
+export async function findSales(ctx: SalesContext, locationIds: string[], from: string, until: string, cursor?: string): Promise<Found> {
   const found: Found = { sales: 0, refunds: 0 };
-  // Square searches at most ten locations at a time
-  const page = await searchOrders(
-    ctx.api,
-    ctx.locations.slice(0, 10).map((location) => location.id),
-    from,
-    cursor,
-  );
+  const page = await searchOrders(ctx.api, locationIds, from, until, cursor);
   for (const order of page.orders) {
     const kind = kindOf(order);
     if (kind === "refund") {
@@ -213,7 +206,6 @@ export async function findSales(ctx: SalesContext, from: string, cursor?: string
       const { created } = await claimSale(ctx.swell, order.id, describeSale(order, undefined, locationName(ctx, order.location_id)));
       found.sales += created ? 1 : 0;
     }
-    found.last = order.updated_at || found.last;
   }
   found.cursor = page.cursor;
   return found;

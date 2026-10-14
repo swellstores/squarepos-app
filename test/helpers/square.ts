@@ -119,9 +119,12 @@ export function createSquare(options: { token?: string; locations?: Row[] } = {}
       return json(200, answer);
     }
     if (path === "/orders/search") {
-      const from: string = body.query?.filter?.date_time_filter?.updated_at?.start_at || "";
+      const { start_at: from = "", end_at: until = "9999" } = body.query?.filter?.date_time_filter?.updated_at || {};
+      if ((body.location_ids as string[]).length > 10) {
+        return refused(400, "INVALID_VALUE", "At most 10 location IDs can be searched.", "location_ids");
+      }
       const found = orders
-        .filter((order) => order.state === "COMPLETED" && (body.location_ids as string[]).includes(order.location_id) && order.updated_at >= from)
+        .filter((order) => order.state === "COMPLETED" && (body.location_ids as string[]).includes(order.location_id) && order.updated_at >= from && order.updated_at <= until)
         .sort((a, b) => (a.updated_at < b.updated_at ? -1 : 1));
       const start = Number(body.cursor || 0);
       const page = found.slice(start, start + 2);

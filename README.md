@@ -86,7 +86,7 @@ Each completed Square sale at the chosen locations becomes one Swell order.
 - **Refunds.** A refund made in Square is recorded as a refund of the order's Square POS payment, so the order shows as partly refunded or refunded. A refund of a sale that was not imported is left out. Stock follows Square's count when the goods are restocked there.
 - **Not imported:** exchanges (a sale and returned items on one receipt), and sales that an online checkout took through Square's payment API, since that checkout keeps its own orders. Both are listed under **Skipped** with the reason.
 - **How fast.** A sale usually arrives within half a minute of its payment. The five-minute comparison also looks for sales whose notice was lost.
-- **Where it starts.** Sales completed before the import was switched on stay out, also when they are refunded later. **Import past sales** brings them in from a date you choose; a sale imported before is never imported twice.
+- **Where it starts.** Sales completed before the import was switched on stay out, also when they are refunded later. Switching the import off and on again starts it anew from that moment: the sales made while it was off stay out too. **Import past sales** brings them in from a date you choose; a long period is read in the background over several minutes, and a sale imported before is never imported twice.
 
 Where: Orders → Square sales; the **Square POS** tab on every order (receipt number, location, how it was paid, what was refunded, the Square order ID and a receipt link); the **Square POS** tab in the order list. Implemented by `functions/square-events.ts` (Square's `payment.*` and `refund.*` notices), `functions/sweep.ts` and the `sync` workflow.
 
@@ -96,7 +96,7 @@ The store's administrators get one e-mail per incident, not one per item or sale
 
 | Subject starts with "Action needed:" and | Sent when |
 | --- | --- |
-| "Square POS is not syncing with \<store\>" | Square refuses the access token, or a location named in the settings does not exist |
+| "Square POS is not syncing with \<store\>" | Square refuses the access token, a location named in the settings does not exist, or the sales import has no start time yet |
 | "Square's notices to \<store\> have stopped" | Square switched off its notices to the store (checked once an hour) |
 | "stock of \<store\> is no longer shared with Square for some items" | An item stopped syncing |
 | "a Square sale could not be imported into \<store\>" | A sale is listed under Needs attention |
@@ -138,6 +138,7 @@ The buttons start a run in the background; the lists show its result a few secon
 | An item under Needs attention | The note says what stopped it. Correct the cause and start the item again |
 | A sale under Needs attention | The problem is on the sale. **Retry** after correcting the cause, or **Mark as resolved** after recording the sale by hand |
 | A sale under Needs attention: "Swell has no payment method "Square POS"" | The method was removed under Settings → Payments. Press Test connection, which adds it again, then **Retry** |
+| E-mail "Square POS is not syncing": "The sales import has no start time yet" | The settings were last saved before the app recorded the start time. Open the settings and save them once |
 | Stock differs between Square and Swell for a linked item | It should not for longer than five minutes. Choose **Sync now**. If the item is under Needs attention, see above |
 | Test connection: "Square did not accept the access token" | The token was replaced in Square, or **Square environment** does not match it: a sandbox token works only with Sandbox |
 
@@ -176,6 +177,8 @@ Use `swell app push --force` after a change that touches only `functions/lib/`: 
 4. **Notices are hints, numbers are the truth.** A notice only says "look at this item". The sync compares quantities, so its own changes, repeated notices and notices out of order do no harm.
 5. **Nothing is guessed.** A missing count is never read as zero. What cannot be linked or imported is listed with the reason.
 6. **Stock and sales are separate.** An imported order never moves stock, and a sale that cannot be imported never holds stock back.
+
+The time the sales import was switched on is computed by the settings save that switches it on (a hidden field with a formula, `sales.enabled_at`); later saves keep it, and switching off clears it. Only the workflow, while it holds the claim, starts or drops a search from it.
 
 ### Structure
 

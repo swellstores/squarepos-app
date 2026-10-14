@@ -9,6 +9,14 @@
       "default": false
     },
     {
+      "id": "enabled_at",
+      "type": "date",
+      "label": "Import switched on",
+      "readonly": true,
+      "formula": "if(enabled, if(enabled_at, enabled_at, now()), null)",
+      "conditions": { "$and": [{ "enabled": true }, { "enabled": false }] }
+    },
+    {
       "id": "locations",
       "label": "Square locations (names, separated by commas)",
       "type": "short_text",

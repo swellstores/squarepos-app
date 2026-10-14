@@ -29,7 +29,7 @@ function context(extra: Partial<SalesContext> = {}): SalesContext {
 async function run(extra: Partial<SalesContext> = {}) {
   let cursor: string | undefined;
   do {
-    cursor = (await findSales(context(extra), "2026-10-01T00:00:00.000Z", cursor)).cursor;
+    cursor = (await findSales(context(extra), [LOCATION], "2026-10-01T00:00:00.000Z", new Date().toISOString(), cursor)).cursor;
   } while (cursor);
   const waiting = store.sales.filter((sale) => sale.status === "pending").map((sale) => ({ ...sale })) as Sale[];
   return importSales(context(extra), waiting);
@@ -156,7 +156,7 @@ describe("importing sales", () => {
 
   it("waits while Square cannot be reached, then lists the sale", async () => {
     square.orders.push(cardSale);
-    await findSales(context(), "2026-10-01T00:00:00.000Z");
+    await findSales(context(), [LOCATION], "2026-10-01T00:00:00.000Z", new Date().toISOString());
     square.intercept((call) => (call.path.startsWith("/orders/") ? square.unavailable() : undefined));
     const sale = () => ({ ...store.sales[0] }) as Sale;
 
