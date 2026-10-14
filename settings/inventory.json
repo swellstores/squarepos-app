@@ -1,0 +1,40 @@
+{
+  "label": "Inventory",
+  "description": "One Square location shares its stock with this store. Linked items are found by SKU: choose Match products in the Actions menu, check the list under Products → Square stock, and start the items there. From then on a sale, a delivery or a recount on either side reaches the other within about a minute. Leave the location empty if your Square account has one location. The Swell location is only for stores that keep stock by location: leave it empty to use the store's stock as a whole.",
+  "fields": [
+    {
+      "id": "enabled",
+      "label": "Keep the stock of linked items in sync",
+      "type": "toggle",
+      "default": false
+    },
+    {
+      "id": "location",
+      "label": "Square location (name)",
+      "type": "short_text",
+      "admin_span": 2,
+      "placeholder": "The account's main location"
+    },
+    {
+      "id": "swell_location",
+      "label": "Swell stock location (name)",
+      "type": "short_text",
+      "admin_span": 2,
+      "placeholder": "The store's stock as a whole"
+    }
+  ],
+  "actions": [
+    {
+      "id": "match",
+      "label": "Match products",
+      "function": "sync",
+      "loading_label": "Starting…",
+      "hint": "Looks for Square items and Swell products with the same SKU",
+      "modal": {
+        "title": "Match products",
+        "description": "Reads the items of your Square catalog and looks for a Swell product or variant with the same SKU. Nothing is changed in Square, and no stock moves: the pairs are listed under Products → Square stock, where you start them. Run it again after adding products or SKUs.",
+        "submit_label": "Match"
+      }
+    }
+  ]
+}

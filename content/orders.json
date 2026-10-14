@@ -1,0 +1,115 @@
+{
+  "collection": "orders",
+  "fields": [
+    {
+      "readonly": true,
+      "id": "receipt_number",
+      "label": "Square receipt",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "location_name",
+      "label": "Square location",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "tender",
+      "label": "Paid with",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "refunded",
+      "label": "Refunded in Square",
+      "type": "number",
+      "digits": 2
+    },
+    {
+      "readonly": true,
+      "id": "square_order_id",
+      "label": "Square order ID",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "receipt_url",
+      "label": "Receipt link",
+      "type": "short_text"
+    }
+  ],
+  "views": [
+    {
+      "id": "list",
+      "tabs": [
+        {
+          "id": "square-pos",
+          "label": "Square POS",
+          "query": {
+            "square_order_id": {
+              "$exists": true,
+              "$ne": null
+            }
+          }
+        }
+      ],
+      "fields": []
+    },
+    {
+      "id": "edit",
+      "tabs": [
+        {
+          "id": "square-pos",
+          "label": "Square POS",
+          "fields": [
+            {
+              "type": "field_row",
+              "fields": [
+                {
+                  "id": "receipt_number",
+                  "admin_span": 1
+                },
+                {
+                  "id": "location_name",
+                  "admin_span": 1
+                },
+                {
+                  "id": "tender",
+                  "admin_span": 2
+                }
+              ]
+            },
+            {
+              "type": "field_row",
+              "fields": [
+                {
+                  "id": "refunded",
+                  "admin_span": 1,
+                  "conditions": {
+                    "refunded": {
+                      "$gt": 0
+                    }
+                  }
+                },
+                {
+                  "id": "square_order_id",
+                  "admin_span": 2
+                }
+              ]
+            },
+            {
+              "id": "receipt_url",
+              "conditions": {
+                "receipt_url": {
+                  "$exists": true,
+                  "$ne": null
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

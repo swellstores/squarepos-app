@@ -1,0 +1,49 @@
+{
+  "id": "squarepos",
+  "name": "Square POS",
+  "type": "integration",
+  "version": "0.9.0",
+  "description": "One stock and one order history for Square POS and your Swell store",
+  "support_email": "support@swell.is",
+  "repository_url": "https://github.com/swellstores/squarepos-app",
+  "price_external": true,
+  "images": [
+    {
+      "id": "one-stock",
+      "image_src": "assets/images/1-one-stock.png",
+      "title": "One stock for shop and store",
+      "description": "A sale, a delivery or a recount on either side reaches the other, usually within a minute."
+    },
+    {
+      "id": "sales-as-orders",
+      "image_src": "assets/images/2-sales-as-orders.png",
+      "title": "Till sales in your order history",
+      "description": "Each sale completed in Square becomes a paid order in Swell, on the customer's account when Swell knows the customer."
+    },
+    {
+      "id": "to-the-cent",
+      "image_src": "assets/images/3-to-the-cent.png",
+      "title": "The receipt, to the cent",
+      "description": "Lines, discounts and taxes are the ones Square charged, and the order total is what the customer paid."
+    },
+    {
+      "id": "nothing-guessed",
+      "image_src": "assets/images/4-nothing-guessed.png",
+      "title": "Nothing guessed, nothing lost",
+      "description": "What cannot be linked or imported is listed with the reason, and your administrators get one e-mail."
+    },
+    {
+      "id": "setup",
+      "image_src": "assets/images/5-setup.png",
+      "title": "Set up in minutes",
+      "description": "Paste your Square access token, match your products by SKU, and switch on what you need."
+    }
+  ],
+  "permissions": [
+    "write_products",
+    "write_orders",
+    "write_payments",
+    "write_accounts",
+    "write_settings"
+  ]
+}

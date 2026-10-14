@@ -1,0 +1,164 @@
+{
+  "label": "Square sales",
+  "description": "One record per completed Square order at the chosen locations. The app uses it to import each sale once, to record its refunds, and to list a sale that could not be imported with the reason.",
+  "name_field": "name",
+  "searches": [
+    {
+      "id": "default",
+      "fields": [
+        "name",
+        "receipt_number",
+        "order_number",
+        "customer_name",
+        "customer_email"
+      ]
+    }
+  ],
+  "fields": {
+    "key": {
+      "type": "string",
+      "label": "Key",
+      "description": "The Square order ID. Unique, so a sale is imported once.",
+      "required": true,
+      "unique": true,
+      "immutable": true
+    },
+    "name": {
+      "type": "string",
+      "label": "Sale"
+    },
+    "status": {
+      "type": "string",
+      "label": "Status",
+      "enum": [
+        "pending",
+        "imported",
+        "failed",
+        "skipped",
+        "resolved"
+      ],
+      "default": "pending"
+    },
+    "problem": {
+      "type": "string",
+      "label": "Problem"
+    },
+    "location_id": {
+      "type": "string",
+      "label": "Square location ID"
+    },
+    "location_name": {
+      "type": "string",
+      "label": "Location"
+    },
+    "receipt_number": {
+      "type": "string",
+      "label": "Receipt"
+    },
+    "receipt_url": {
+      "type": "string",
+      "label": "Receipt link"
+    },
+    "source": {
+      "type": "string",
+      "label": "Taken with"
+    },
+    "tender": {
+      "type": "string",
+      "label": "Paid with"
+    },
+    "total": {
+      "type": "float",
+      "label": "Total",
+      "scale": 2
+    },
+    "refunded": {
+      "type": "float",
+      "label": "Refunded",
+      "scale": 2,
+      "default": 0
+    },
+    "refund_state": {
+      "type": "string",
+      "label": "Refund",
+      "enum": [
+        "none",
+        "partial",
+        "full"
+      ],
+      "default": "none"
+    },
+    "refunds": {
+      "type": "array",
+      "label": "Refunds",
+      "value_type": "object",
+      "fields": {
+        "id": {
+          "type": "string",
+          "label": "Square refund ID"
+        },
+        "amount": {
+          "type": "float",
+          "label": "Amount",
+          "scale": 2
+        },
+        "reason": {
+          "type": "string",
+          "label": "Reason"
+        },
+        "date": {
+          "type": "date",
+          "label": "Date"
+        }
+      }
+    },
+    "currency": {
+      "type": "string",
+      "label": "Currency"
+    },
+    "order_id": {
+      "type": "objectid",
+      "label": "Order ID"
+    },
+    "order": {
+      "type": "link",
+      "label": "Order",
+      "model": "orders",
+      "key": "order_id"
+    },
+    "order_number": {
+      "type": "string",
+      "label": "Order"
+    },
+    "account_id": {
+      "type": "objectid",
+      "label": "Customer ID"
+    },
+    "customer_name": {
+      "type": "string",
+      "label": "Customer"
+    },
+    "customer_email": {
+      "type": "string",
+      "label": "Customer e-mail"
+    },
+    "square_updated_at": {
+      "type": "string",
+      "label": "Square order changed",
+      "description": "The change of the Square order this record reflects. A newer one, such as a refund, is read again."
+    },
+    "attempts": {
+      "type": "int",
+      "label": "Attempts",
+      "default": 0
+    },
+    "date_attempted": {
+      "type": "date",
+      "label": "Last attempt"
+    },
+    "date_sold": {
+      "type": "date",
+      "label": "Sold"
+    }
+  }
+}

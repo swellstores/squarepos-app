@@ -1,0 +1,13 @@
+Sell from one stock in your Square shop and your Swell store, and see every till sale in your Swell order history. A sale, a delivery or a recount on either side reaches the other, usually within a minute, and each sale completed in Square becomes a paid order in Swell.
+
+Connect Square with your own access token. The app runs inside Swell and never changes your Square catalog, orders or customers: in Square it writes stock adjustments only.
+
+- **Stock that adds up.** Only changes travel, never totals: what Swell sold is taken off Square's count, and what Square sold is taken off Swell's. A sale at the till and an online order at the same moment both count, and a count copied over from the other side never wipes out a change.
+- **Linked by SKU, on your word.** Match products pairs each Square variation with the Swell product or variant that has the same SKU, and lists them with both quantities. You start the pairs and say which side has the right numbers. Doubled or missing SKUs and untracked items stay unlinked, with the reason.
+- **A stock history you can read.** Every change that comes from Square is an entry in the product's stock history in Swell, marked Square POS, with what happened: sold, received, recount. Online orders arrive in Square as stock sold.
+- **Till sales as orders.** Lines, discounts, taxes, tips and the total are those of the receipt, to the cent. The orders are paid, need no fulfillment, take no stock a second time and send no e-mails. Their numbers start with SQ- and Square's receipt number.
+- **On the customer's account.** A sale goes to the Swell account with the e-mail address of the Square customer. The app creates no customers: all other sales go to one walk-in account.
+- **Refunds.** A refund made in Square is recorded on its order, and a full refund marks the order as refunded.
+- **Nothing lost quietly.** Every five minutes all linked items are compared, whether or not Square announced a change. A step that was cut short is finished exactly once. What cannot be synced or imported is listed under Needs attention with the reason, and your administrators get one e-mail.
+
+Setup takes a few minutes. In the Square Developer Console, create an application and copy its production access token. In Swell, paste the token in the app settings and run Test connection, choose Match products, start the matched items under Products → Square stock, and switch on the stock sync and the sales import. To try it first, use the application's sandbox token in your store's test environment. The app shares the stock of one Square location; sales can be imported from all of them. Items sold by weight are not linked, and products are not created on either side.

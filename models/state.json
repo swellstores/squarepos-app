@@ -1,0 +1,80 @@
+{
+  "label": "Square POS state",
+  "description": "What the app remembers between runs, one record per kind: the claim of the sync that is running, the webhook it registered with Square, how far the search for sales has come, and the result of the last product match.",
+  "name_field": "key",
+  "fields": {
+    "key": {
+      "type": "string",
+      "label": "Kind",
+      "required": true,
+      "unique": true,
+      "immutable": true
+    },
+    "owner": {
+      "type": "string",
+      "label": "Run",
+      "description": "On the claim: the run that holds it."
+    },
+    "date_heartbeat": {
+      "type": "date",
+      "label": "Last sign of life",
+      "description": "On the claim: renewed by the run while it works. A claim without a recent one is taken over."
+    },
+    "subscription_id": {
+      "type": "string",
+      "label": "Square webhook subscription"
+    },
+    "signature_key": {
+      "type": "string",
+      "label": "Webhook signature key",
+      "private": true
+    },
+    "address": {
+      "type": "string",
+      "label": "Webhook address",
+      "description": "The address as registered with Square. Its signature covers it.",
+      "private": true
+    },
+    "date_received": {
+      "type": "date",
+      "label": "Last notice from Square"
+    },
+    "cursor": {
+      "type": "string",
+      "label": "Sales read up to",
+      "description": "The time of change up to which Square's orders have been read."
+    },
+    "requested": {
+      "type": "bool",
+      "label": "Search requested",
+      "description": "Set by a payment or refund notice, cleared when a run searches Square's orders.",
+      "default": false
+    },
+    "summary": {
+      "type": "string",
+      "label": "Result"
+    },
+    "date_done": {
+      "type": "date",
+      "label": "Finished"
+    },
+    "swell_location": {
+      "type": "string",
+      "label": "Swell stock location",
+      "description": "On the store record: the name set under Stock, as it was last looked up."
+    },
+    "swell_location_id": {
+      "type": "string",
+      "label": "Swell stock location ID"
+    },
+    "problem": {
+      "type": "string",
+      "label": "Problem"
+    },
+    "adopted": {
+      "type": "bool",
+      "label": "Taken up by its run",
+      "description": "On the claim: false while the run that a function started for it has not begun."
+    }
+  }
+}

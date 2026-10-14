@@ -1,0 +1,17 @@
+{
+  "description": "One stock and one order history for Square POS and your Swell store",
+  "devDependencies": {
+    "@swell/app-types": "^1.2.0",
+    "typescript": "^5.9.3",
+    "@cloudflare/vitest-plugin": "1.4.x",
+    "vitest": "5.0.x",
+    "@swell/apps-sdk": "2.0.0-alpha.0"
+  },
+  "name": "square-pos",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit && tsc --build --noEmit test",
+    "test": "vitest run"
+  },
+  "version": "0.9.0"
+}

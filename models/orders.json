@@ -1,0 +1,30 @@
+{
+  "description": "Marks the orders that the app imported from Square, with the receipt they copy.",
+  "fields": {
+    "square_order_id": {
+      "type": "string",
+      "label": "Square order ID"
+    },
+    "receipt_number": {
+      "type": "string",
+      "label": "Square receipt"
+    },
+    "receipt_url": {
+      "type": "string",
+      "label": "Receipt link"
+    },
+    "location_name": {
+      "type": "string",
+      "label": "Square location"
+    },
+    "tender": {
+      "type": "string",
+      "label": "Paid with"
+    },
+    "refunded": {
+      "type": "float",
+      "label": "Refunded in Square",
+      "scale": 2
+    }
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "label": "Square stock items",
+  "description": "One record per Square variation that the app found by its SKU. A linked pair shares its stock: the record remembers the quantity both sides held after the last sync, and the step in progress, so a change on either side is passed on once.",
+  "name_field": "name",
+  "searches": [
+    {
+      "id": "default",
+      "fields": [
+        "name",
+        "sku"
+      ]
+    }
+  ],
+  "fields": {
+    "key": {
+      "type": "string",
+      "label": "Key",
+      "description": "Square location and variation. Unique, so a variation has one record per location.",
+      "required": true,
+      "unique": true,
+      "immutable": true
+    },
+    "name": {
+      "type": "string",
+      "label": "Item in Square"
+    },
+    "sku": {
+      "type": "string",
+      "label": "SKU"
+    },
+    "location_id": {
+      "type": "string",
+      "label": "Square location ID"
+    },
+    "variation_id": {
+      "type": "string",
+      "label": "Square variation ID"
+    },
+    "product_id": {
+      "type": "objectid",
+      "label": "Product ID"
+    },
+    "product": {
+      "type": "link",
+      "label": "Product",
+      "model": "products",
+      "key": "product_id"
+    },
+    "variant_id": {
+      "type": "objectid",
+      "label": "Variant ID"
+    },
+    "swell_name": {
+      "type": "string",
+      "label": "Item in Swell"
+    },
+    "status": {
+      "type": "string",
+      "label": "Status",
+      "enum": [
+        "unlinked",
+        "ready",
+        "active",
+        "error"
+      ],
+      "default": "unlinked"
+    },
+    "reason": {
+      "type": "string",
+      "label": "Note",
+      "description": "Why the pair is not linked, or what stopped its sync."
+    },
+    "start": {
+      "type": "string",
+      "label": "Starting stock from",
+      "description": "Set while a start is waiting: the side whose quantity both sides take.",
+      "enum": [
+        "square",
+        "swell"
+      ]
+    },
+    "agreed": {
+      "type": "int",
+      "label": "Stock in sync",
+      "description": "The quantity both sides held after the last sync."
+    },
+    "swell_level": {
+      "type": "int",
+      "label": "In Swell"
+    },
+    "square_level": {
+      "type": "int",
+      "label": "In Square"
+    },
+    "oversold": {
+      "type": "bool",
+      "label": "Oversold",
+      "default": false
+    },
+    "marked": {
+      "type": "bool",
+      "label": "Waiting for a sync",
+      "description": "Set when a change was announced on either side, cleared when a sync looks at the pair.",
+      "default": false
+    },
+    "seq": {
+      "type": "int",
+      "label": "Syncs",
+      "default": 0
+    },
+    "step": {
+      "type": "object",
+      "label": "Step in progress",
+      "description": "Written before a change is passed on and removed after both sides have it. A sync that was cut short repeats it exactly."
+    },
+    "last_change": {
+      "type": "string",
+      "label": "Last change"
+    },
+    "date_synced": {
+      "type": "date",
+      "label": "Last change passed on"
+    },
+    "date_read": {
+      "type": "date",
+      "label": "Stock read at",
+      "description": "When the last sync read the quantities. Changes after it belong to the next sync."
+    },
+    "pending": {
+      "type": "bool",
+      "label": "Step in progress",
+      "default": false
+    },
+    "entry_id": {
+      "type": "string",
+      "label": "Last stock entry",
+      "description": "The Swell stock entry the app wrote last for the pair. It is the app's own change, not one to pass on."
+    },
+    "swell_location": {
+      "type": "string",
+      "label": "Swell stock location",
+      "description": "The Swell stock location the pair was started with, in stores that keep stock by location."
+    }
+  }
+}

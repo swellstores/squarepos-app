@@ -1,0 +1,54 @@
+{
+  "label": "Connection",
+  "description": "Connect your Square account. In the Square Developer Console (developer.squareup.com/apps), create an application, open its Credentials page, switch to Production and copy the access token. Paste it here, save, and press Test connection: it checks the token and registers the notices Square sends to this store. To try the app without touching your shop, use the Sandbox access token and choose Sandbox below.",
+  "fields": [
+    {
+      "id": "access_token",
+      "label": "Square access token",
+      "type": "secret",
+      "admin_span": 2
+    },
+    {
+      "id": "environment",
+      "label": "Square environment",
+      "type": "select",
+      "admin_span": 2,
+      "default": "production",
+      "options": [
+        {
+          "value": "production",
+          "label": "Production"
+        },
+        {
+          "value": "sandbox",
+          "label": "Sandbox (test data)"
+        }
+      ]
+    },
+    {
+      "id": "account",
+      "label": "Connected account",
+      "type": "short_text",
+      "admin_span": 4,
+      "readonly": true,
+      "placeholder": "Not tested yet"
+    },
+    {
+      "id": "test-connection",
+      "label": "Test connection",
+      "type": "action",
+      "function": "test-connection",
+      "loading_label": "Testing…",
+      "hint": "Checks the saved access token with Square, lists the locations, and registers the notices Square sends to this store"
+    }
+  ],
+  "actions": [
+    {
+      "id": "sync-now",
+      "label": "Sync now",
+      "function": "sync",
+      "loading_label": "Starting…",
+      "hint": "Compares the stock of every linked item and looks for new Square sales now"
+    }
+  ]
+}

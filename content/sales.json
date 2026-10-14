@@ -1,0 +1,406 @@
+{
+  "collection": "sales",
+  "label": "Square sales",
+  "description": "The sales completed in Square and the orders the app created for them.",
+  "fields": [
+    {
+      "readonly": true,
+      "id": "name",
+      "label": "Sale",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "status",
+      "label": "Status",
+      "type": "select",
+      "options": [
+        {
+          "value": "imported",
+          "label": "Imported"
+        },
+        {
+          "value": "pending",
+          "label": "In progress"
+        },
+        {
+          "value": "failed",
+          "label": "Needs attention"
+        },
+        {
+          "value": "skipped",
+          "label": "Skipped"
+        },
+        {
+          "value": "resolved",
+          "label": "Resolved by hand"
+        }
+      ]
+    },
+    {
+      "readonly": true,
+      "id": "problem",
+      "label": "Problem",
+      "type": "long_text"
+    },
+    {
+      "readonly": true,
+      "id": "location_name",
+      "label": "Location",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "receipt_number",
+      "label": "Receipt",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "source",
+      "label": "Taken with",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "tender",
+      "label": "Paid with",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "total",
+      "label": "Total",
+      "type": "number",
+      "digits": 2
+    },
+    {
+      "readonly": true,
+      "id": "currency",
+      "label": "Currency",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "refunded",
+      "label": "Refunded",
+      "type": "number",
+      "digits": 2
+    },
+    {
+      "readonly": true,
+      "id": "refund_state",
+      "label": "Refund",
+      "type": "select",
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "partial",
+          "label": "Partly refunded"
+        },
+        {
+          "value": "full",
+          "label": "Refunded"
+        }
+      ]
+    },
+    {
+      "readonly": true,
+      "id": "order",
+      "label": "Order",
+      "type": "lookup",
+      "model": "orders",
+      "key": "order_id"
+    },
+    {
+      "readonly": true,
+      "id": "order_number",
+      "label": "Order",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "customer_name",
+      "label": "Customer",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "customer_email",
+      "label": "Customer e-mail",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "date_sold",
+      "label": "Sold",
+      "type": "datetime"
+    },
+    {
+      "readonly": true,
+      "id": "attempts",
+      "label": "Attempts",
+      "type": "number"
+    },
+    {
+      "readonly": true,
+      "id": "date_attempted",
+      "label": "Last attempt",
+      "type": "datetime"
+    }
+  ],
+  "views": [
+    {
+      "id": "list",
+      "nav": {
+        "label": "Square sales",
+        "parent": "orders"
+      },
+      "sort": "date_sold desc",
+      "tabs": [
+        {
+          "id": "attention",
+          "label": "Needs attention",
+          "query": {
+            "status": "failed"
+          }
+        },
+        {
+          "id": "imported",
+          "label": "Imported",
+          "query": {
+            "status": "imported"
+          }
+        },
+        {
+          "id": "refunded",
+          "label": "Refunded",
+          "query": {
+            "refund_state": {
+              "$in": [
+                "partial",
+                "full"
+              ]
+            }
+          }
+        },
+        {
+          "id": "skipped",
+          "label": "Skipped",
+          "query": {
+            "status": "skipped"
+          }
+        }
+      ],
+      "fields": [
+        {
+          "id": "name"
+        },
+        {
+          "id": "date_sold"
+        },
+        {
+          "id": "location_name"
+        },
+        {
+          "id": "customer_name"
+        },
+        {
+          "id": "total"
+        },
+        {
+          "id": "currency"
+        },
+        {
+          "id": "status"
+        },
+        {
+          "id": "refund_state"
+        },
+        {
+          "id": "order_number"
+        },
+        {
+          "id": "problem",
+          "truncated": 60
+        }
+      ],
+      "actions": [
+        {
+          "id": "open-square",
+          "label": "Open Square",
+          "link": "https://app.squareup.com/dashboard/sales/transactions",
+          "target": "blank"
+        }
+      ],
+      "bulk_actions": [
+        {
+          "id": "retry-selected",
+          "label": "Retry",
+          "function": "sync",
+          "loading_label": "Starting…",
+          "modal": {
+            "title": "Retry the selected sales",
+            "description": "Tries again to import the selected sales and reads their refunds again. A sale that has its order is not imported twice.",
+            "submit_label": "Retry"
+          }
+        }
+      ]
+    },
+    {
+      "id": "edit",
+      "fields": [
+        {
+          "type": "field_row",
+          "fields": [
+            {
+              "id": "name",
+              "admin_span": 2
+            },
+            {
+              "id": "status",
+              "admin_span": 1
+            },
+            {
+              "id": "date_sold",
+              "admin_span": 1
+            }
+          ]
+        },
+        {
+          "id": "problem",
+          "conditions": {
+            "problem": {
+              "$exists": true,
+              "$ne": null
+            }
+          }
+        },
+        {
+          "type": "field_row",
+          "fields": [
+            {
+              "id": "order",
+              "admin_span": 2
+            },
+            {
+              "id": "customer_name",
+              "admin_span": 1
+            },
+            {
+              "id": "customer_email",
+              "admin_span": 1
+            }
+          ]
+        },
+        {
+          "type": "field_row",
+          "fields": [
+            {
+              "id": "total",
+              "admin_span": 1
+            },
+            {
+              "id": "currency",
+              "admin_span": 1
+            },
+            {
+              "id": "refunded",
+              "admin_span": 1
+            },
+            {
+              "id": "refund_state",
+              "admin_span": 1
+            }
+          ]
+        },
+        {
+          "type": "field_row",
+          "fields": [
+            {
+              "id": "location_name",
+              "admin_span": 1
+            },
+            {
+              "id": "receipt_number",
+              "admin_span": 1
+            },
+            {
+              "id": "tender",
+              "admin_span": 1
+            },
+            {
+              "id": "source",
+              "admin_span": 1
+            }
+          ]
+        },
+        {
+          "type": "field_row",
+          "fields": [
+            {
+              "id": "attempts",
+              "admin_span": 1
+            },
+            {
+              "id": "date_attempted",
+              "admin_span": 1
+            }
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "id": "view-receipt",
+          "label": "View receipt",
+          "link": "{receipt_url}",
+          "target": "blank",
+          "conditions": {
+            "receipt_url": {
+              "$exists": true,
+              "$ne": null
+            }
+          }
+        }
+      ],
+      "extra_actions": [
+        {
+          "id": "retry",
+          "label": "Retry",
+          "function": "sync",
+          "loading_label": "Trying again…",
+          "hint": "Tries again to import this sale, or to record its refunds",
+          "conditions": {
+            "status": {
+              "$in": [
+                "failed",
+                "skipped"
+              ]
+            }
+          }
+        },
+        {
+          "id": "resolve",
+          "label": "Mark as resolved",
+          "function": "resolve-sale",
+          "conditions": {
+            "status": {
+              "$in": [
+                "failed",
+                "skipped"
+              ]
+            }
+          },
+          "modal": {
+            "title": "Mark as resolved",
+            "description": "Use this after you recorded the sale in Swell by hand, or decided that no order is needed. The app will not import it and stops listing it under Needs attention.",
+            "submit_label": "Mark as resolved"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "label": "Sales",
+  "description": "Each sale completed in Square becomes a paid order in Swell, with the lines, taxes, discounts and total of the receipt, on the customer's account when Swell knows the customer's e-mail address. The orders take no stock (the stock sync does that) and send no customer e-mails. Sales are imported from the moment this is switched on; for earlier ones choose Import past sales in the Actions menu. Leave the locations empty to import the sales of every location.",
+  "fields": [
+    {
+      "id": "enabled",
+      "label": "Import completed Square sales as orders",
+      "type": "toggle",
+      "default": false
+    },
+    {
+      "id": "locations",
+      "label": "Square locations (names, separated by commas)",
+      "type": "short_text",
+      "admin_span": 4,
+      "placeholder": "All locations"
+    },
+    {
+      "id": "announce",
+      "label": "Let other apps and webhooks react to imported orders",
+      "type": "toggle",
+      "default": false
+    }
+  ],
+  "actions": [
+    {
+      "id": "import-past",
+      "label": "Import past sales",
+      "function": "sync",
+      "loading_label": "Starting…",
+      "hint": "Imports the Square sales completed since a date",
+      "modal": {
+        "title": "Import past sales",
+        "description": "Imports the sales completed in Square since the date you choose, at the locations set under In-store sales. A sale that was imported before is not imported twice. The orders appear under Orders → Square sales.",
+        "submit_label": "Import",
+        "fields": [
+          {
+            "id": "since",
+            "label": "Import sales since",
+            "type": "date",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "retry-sales",
+      "label": "Retry failed sales",
+      "function": "sync",
+      "loading_label": "Starting…",
+      "hint": "Tries again to import every sale listed under Needs attention"
+    }
+  ]
+}

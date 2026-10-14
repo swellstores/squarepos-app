@@ -1,0 +1,17 @@
+{
+  "collection": "alerts",
+  "label": "Square POS needs attention",
+  "description": "Tells the store's administrators that Square refuses the connection, that its notices stopped, that a linked item stopped syncing, or that sales could not be imported. One e-mail per incident, not one per item or sale.",
+  "method": "email",
+  "admin": true,
+  "event": "created",
+  "new": true,
+  "subject": "Action needed: {% if key == 'connection' %}Square POS is not syncing with {{ store.name }}{% elsif key == 'webhook' %}Square's notices to {{ store.name }} have stopped{% elsif key == 'stock' %}stock of {{ store.name }} is no longer shared with Square for some items{% else %}a Square sale could not be imported into {{ store.name }}{% endif %}",
+  "sample": {
+    "key": "sales",
+    "message": "1 Square sale could not be imported. The lines of the Square order add up to 41.98 USD, but its total is 42.48 USD. It is not imported, so that no order differs from its receipt.",
+    "count": 1,
+    "date_last_seen": "2026-10-13T12:00:00.000Z",
+    "app_id": "000000000000000000000000"
+  }
+}

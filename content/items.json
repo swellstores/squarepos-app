@@ -1,0 +1,375 @@
+{
+  "collection": "items",
+  "label": "Square stock",
+  "description": "The Square items the app found by SKU, and the stock they share with this store.",
+  "fields": [
+    {
+      "readonly": true,
+      "id": "name",
+      "label": "Item in Square",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "sku",
+      "label": "SKU",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "swell_name",
+      "label": "Item in Swell",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "product",
+      "label": "Product",
+      "type": "lookup",
+      "model": "products",
+      "key": "product_id"
+    },
+    {
+      "readonly": true,
+      "id": "status",
+      "label": "Status",
+      "type": "select",
+      "options": [
+        {
+          "value": "active",
+          "label": "In sync"
+        },
+        {
+          "value": "ready",
+          "label": "Ready to start"
+        },
+        {
+          "value": "unlinked",
+          "label": "Not linked"
+        },
+        {
+          "value": "error",
+          "label": "Needs attention"
+        }
+      ]
+    },
+    {
+      "readonly": true,
+      "id": "reason",
+      "label": "Note",
+      "type": "long_text"
+    },
+    {
+      "readonly": true,
+      "id": "agreed",
+      "label": "Stock in sync",
+      "type": "number"
+    },
+    {
+      "readonly": true,
+      "id": "swell_level",
+      "label": "In Swell",
+      "type": "number"
+    },
+    {
+      "readonly": true,
+      "id": "square_level",
+      "label": "In Square",
+      "type": "number"
+    },
+    {
+      "readonly": true,
+      "id": "oversold",
+      "label": "Oversold",
+      "type": "toggle"
+    },
+    {
+      "readonly": true,
+      "id": "last_change",
+      "label": "Last change",
+      "type": "short_text"
+    },
+    {
+      "readonly": true,
+      "id": "date_synced",
+      "label": "Last change passed on",
+      "type": "datetime"
+    }
+  ],
+  "views": [
+    {
+      "id": "list",
+      "nav": {
+        "label": "Square stock",
+        "parent": "products"
+      },
+      "sort": "name asc",
+      "tabs": [
+        {
+          "id": "attention",
+          "label": "Needs attention",
+          "query": {
+            "$or": [
+              {
+                "status": "error"
+              },
+              {
+                "oversold": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "active",
+          "label": "In sync",
+          "query": {
+            "status": "active"
+          }
+        },
+        {
+          "id": "ready",
+          "label": "Ready to start",
+          "query": {
+            "status": "ready"
+          }
+        },
+        {
+          "id": "unlinked",
+          "label": "Not linked",
+          "query": {
+            "status": "unlinked"
+          }
+        }
+      ],
+      "fields": [
+        {
+          "id": "name"
+        },
+        {
+          "id": "sku"
+        },
+        {
+          "id": "status"
+        },
+        {
+          "id": "swell_level"
+        },
+        {
+          "id": "square_level"
+        },
+        {
+          "id": "last_change",
+          "truncated": 40
+        },
+        {
+          "id": "reason",
+          "truncated": 60
+        }
+      ],
+      "actions": [
+        {
+          "id": "match",
+          "label": "Match products",
+          "function": "sync",
+          "loading_label": "Starting…",
+          "modal": {
+            "title": "Match products",
+            "description": "Reads the items of your Square catalog and looks for a Swell product or variant with the same SKU. Nothing is changed in Square, and no stock moves: the pairs are listed here, where you start them. Run it again after adding products or SKUs.",
+            "submit_label": "Match"
+          }
+        },
+        {
+          "id": "open-square",
+          "label": "Open Square",
+          "link": "https://app.squareup.com/dashboard/items/library",
+          "target": "blank"
+        }
+      ],
+      "bulk_actions": [
+        {
+          "id": "start-selected",
+          "label": "Start syncing",
+          "function": "sync",
+          "loading_label": "Starting…",
+          "modal": {
+            "title": "Start syncing the selected items",
+            "description": "Starts the stock sync. This is the one time a side wins: the other side receives the difference as a single stock adjustment. From then on only changes travel, in both directions. Items that are not matched are left as they are.",
+            "submit_label": "Start",
+            "fields": [
+              {
+                "id": "side",
+                "label": "Which side has the right quantities?",
+                "type": "select",
+                "required": true,
+                "default": "square",
+                "options": [
+                  {
+                    "value": "square",
+                    "label": "Square: Swell takes Square's quantities"
+                  },
+                  {
+                    "value": "swell",
+                    "label": "Swell: Square takes Swell's quantities"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "stop-selected",
+          "label": "Stop syncing",
+          "function": "sync",
+          "loading_label": "Stopping…",
+          "modal": {
+            "title": "Stop syncing the selected items",
+            "description": "The selected items stop sharing their stock. Nothing changes on either side; each keeps the quantity it has. To share stock again, start them again and say which side is right.",
+            "submit_label": "Stop"
+          }
+        }
+      ]
+    },
+    {
+      "id": "edit",
+      "fields": [
+        {
+          "type": "field_row",
+          "fields": [
+            {
+              "id": "name",
+              "admin_span": 2
+            },
+            {
+              "id": "sku",
+              "admin_span": 1
+            },
+            {
+              "id": "status",
+              "admin_span": 1
+            }
+          ]
+        },
+        {
+          "id": "reason",
+          "conditions": {
+            "reason": {
+              "$exists": true,
+              "$ne": null
+            }
+          }
+        },
+        {
+          "type": "field_row",
+          "fields": [
+            {
+              "id": "product",
+              "admin_span": 2
+            },
+            {
+              "id": "swell_name",
+              "admin_span": 2
+            }
+          ]
+        },
+        {
+          "type": "field_row",
+          "fields": [
+            {
+              "id": "swell_level",
+              "admin_span": 1
+            },
+            {
+              "id": "square_level",
+              "admin_span": 1
+            },
+            {
+              "id": "agreed",
+              "admin_span": 1
+            },
+            {
+              "id": "oversold",
+              "admin_span": 1
+            }
+          ]
+        },
+        {
+          "type": "field_row",
+          "fields": [
+            {
+              "id": "last_change",
+              "admin_span": 2
+            },
+            {
+              "id": "date_synced",
+              "admin_span": 2
+            }
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "id": "open-square",
+          "label": "Open Square",
+          "link": "https://app.squareup.com/dashboard/items/library",
+          "target": "blank"
+        }
+      ],
+      "extra_actions": [
+        {
+          "id": "start",
+          "label": "Start syncing",
+          "function": "sync",
+          "loading_label": "Starting…",
+          "hint": "Shares this item's stock between Square and Swell",
+          "conditions": {
+            "status": {
+              "$in": [
+                "ready",
+                "error"
+              ]
+            }
+          },
+          "modal": {
+            "title": "Start syncing this item",
+            "description": "Starts the stock sync. This is the one time a side wins: the other side receives the difference as a single stock adjustment. From then on only changes travel, in both directions. Items that are not matched are left as they are.",
+            "submit_label": "Start",
+            "fields": [
+              {
+                "id": "side",
+                "label": "Which side has the right quantities?",
+                "type": "select",
+                "required": true,
+                "default": "square",
+                "options": [
+                  {
+                    "value": "square",
+                    "label": "Square: Swell takes Square's quantities"
+                  },
+                  {
+                    "value": "swell",
+                    "label": "Swell: Square takes Swell's quantities"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "stop",
+          "label": "Stop syncing",
+          "function": "sync",
+          "loading_label": "Stopping…",
+          "hint": "Stops sharing this item's stock. Nothing changes on either side",
+          "conditions": {
+            "status": {
+              "$in": [
+                "active",
+                "error"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
