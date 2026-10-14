@@ -2,7 +2,7 @@
 	"id": "squarepos",
 	"name": "Square POS",
 	"type": "integration",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"description": "One stock and one order history for Square POS and your Swell store",
 	"support_email": "support@swell.is",
 	"documentation_url": "https://developers.swell.is/app-guides/square-pos",

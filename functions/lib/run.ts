@@ -715,7 +715,8 @@ export async function run(req: RunRequest, step: Steps): Promise<Row> {
             // Taken off before the search: a notice that comes from now on is for the next one
             values.requested = false;
           }
-          if (since) {
+          // A date still to come has no sales yet, and Square takes no range that ends before it begins
+          if (since && since < now) {
             // Up to now: the search for new sales goes on from its own cursor. A past search
             // under way from an earlier date is begun again from that date
             const past = state.past as Pass | null | undefined;

@@ -32,7 +32,7 @@ To try the app first, use the **Sandbox** access token of your Square applicatio
 | | **Square location (name)** | The one Square location whose stock is shared with the store. Empty: the account's main location |
 | | **Swell stock location (name)** | Only for stores that keep stock by location: the Swell location paired with the Square one. Empty: the store's stock as a whole |
 | Sales | **Import completed Square sales as orders** | Off by default. Turning it on starts the import from that moment |
-| | **Square locations (names, separated by commas)** | The locations whose sales are imported, up to 10. Empty: the first 10 active locations |
+| | **Square locations (names, separated by commas)** | The locations whose sales are imported. Empty: all active locations |
 | | **Let other apps and webhooks react to imported orders** | Off by default: imported orders raise no events, so other apps and webhooks are not told about them. Turn it on if, for example, an accounting app should see till sales. Customers get no e-mail either way |
 
 Changing the Square location or the Swell stock location stops the started items, since another location holds other quantities. Match products again and start them anew.
@@ -146,7 +146,7 @@ The buttons start a run in the background; the lists show its result a few secon
 
 - **The merchant's own token.** The app does not use Square's OAuth sign-in. You create a Square application yourself and paste its token, which has access to your whole Square account and is stored in the store's settings.
 - **No catalog sync.** Products are not created or changed on either side. Items are linked by the SKUs you keep.
-- **One location for stock.** Sales are imported from up to 10 locations.
+- **One location for stock.** Sales can be imported from any number of locations.
 - **Whole quantities.** Items sold by weight or measure are not linked. On an imported order such a line is one unit with the amount Square charged.
 - **Taxes included in the price and taxes added on top in one sale.** Only the added taxes are listed on the order; the included ones stay in the prices. The total is Square's.
 - **One currency.** Orders are imported in the currency of the Square location. When the store only shows that currency without prices of its own, Swell would record the order in the store's currency at the receipt's numbers: such sales are listed under Needs attention instead of imported.

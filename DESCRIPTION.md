@@ -12,4 +12,4 @@ Connect Square with an access token from your own Square developer application. 
 
 Setup takes a few minutes. In the Square Developer Console, create an application and copy its production access token. In Swell, paste the token in the app settings and run Test connection. Turn on the stock sync, choose Match products, and start the matched items under Products > Square stock. Then turn on the sales import; earlier sales can be imported from a date you choose. To try the app first, use your application's sandbox token in your store's test environment.
 
-Stock is shared with one Square location, and sales can be imported from up to ten of them. Products are not created or changed on either side, and items sold by weight are not linked. Imported orders carry the receipt's lines but no products, so Swell's sales reports by product leave out till sales.
+Stock is shared with one Square location, and sales can be imported from all of them. Products are not created or changed on either side, and items sold by weight are not linked. Imported orders carry the receipt's lines but no products, so Swell's sales reports by product leave out till sales.
