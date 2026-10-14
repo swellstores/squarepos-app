@@ -128,7 +128,7 @@ What makes it reliable:
 
 1. **Only differences travel.** A change on one side is added to the other; it never replaces what happened there meanwhile.
 2. **Every step is written down before it is taken.** The pair's record holds the step in progress. The request to Square carries references made from it, and the Swell stock entry an id made from it. A sync that is cut short repeats the step exactly: it asks Square whether the change is there before sending it again, and a stock entry posted twice under one id is one entry.
-3. **One sync at a time.** The functions only mark and start; the workflow alone writes, and holds a claim while it does. A claim that shows no sign of life for four minutes is taken over. Some workflow runs are recorded by the platform and never begin; the function that started a run watches for about fifteen seconds whether it took up its claim, and otherwise ends it and starts another.
+3. **One sync at a time.** The functions only mark and start; the workflow alone writes, and holds a claim while it does. A claim that shows no sign of life for four minutes is taken over, also when its run never began.
 4. **Notices are hints, numbers are the truth.** A notice only says "look at this item". The sync compares quantities, so its own changes, repeated notices and notices out of order do no harm.
 5. **Nothing is guessed.** A missing count is never read as zero. What cannot be linked or imported is listed with the reason.
 6. **Stock and sales are separate.** An imported order never moves stock, and a sale that cannot be imported never holds stock back.

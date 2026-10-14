@@ -74,7 +74,6 @@ export function createStore(seed: { settings?: Row; shipments?: Row; mode?: "fun
   /** Called once for the next write that matches, to make it fail as the store API would */
   const failures: { when: (method: string, path: string, data: Row) => boolean; error: Error }[] = [];
   /** Runs ended through the API */
-  const terminated: string[] = [];
   /** Called after a stock entry changed a level, as the store raises product.stock_adjusted */
   const stockAdjusted: ((change: Row) => void)[] = [];
 
@@ -204,10 +203,6 @@ export function createStore(seed: { settings?: Row; shipments?: Row; mode?: "fun
       return { count: found.length, results: found.slice(0, query.limit || 15).map((row) => ({ ...row })) };
     }),
     post: vi.fn(async (path: string, body: Row) => {
-      if (path === "/:workflows/instances/terminate") {
-        terminated.push(body.instance_id);
-        return { id: body.instance_id, status: "terminated" };
-      }
       const refund = /^\/payments\/([^/]+)\/refunds$/.exec(path);
       if (refund) {
         const failure = failing("post", path, body);
@@ -360,7 +355,6 @@ export function createStore(seed: { settings?: Row; shipments?: Row; mode?: "fun
     stock: collections["products:stock"],
     variants: collections["products:variants"],
     runs,
-    terminated,
     events,
     failures,
     stockAdjusted,

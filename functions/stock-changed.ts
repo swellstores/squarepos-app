@@ -23,5 +23,5 @@ export default async function (req: SwellRequest) {
   if (marked === 0) {
     return { skipped: "Not a linked item, or the app's own change" };
   }
-  return { marked, started: (await startSync(req.swell, "swell", {}, (promise) => req.context.waitUntil(promise))) || null };
+  return { marked, started: (await startSync(req.swell, "swell")) || null };
 }

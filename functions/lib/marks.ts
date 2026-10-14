@@ -74,56 +74,14 @@ export async function requestSalesSearch(swell: StoreClient): Promise<void> {
 
 type Starter = StoreClient & { workflows: { create(name: string, params?: unknown): Promise<unknown> } };
 
-/** A run takes up its claim in its first step, normally within seconds of being started */
-export const START_CHECKS_MS = [4000, 4000, 4000, 4000];
-
-const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * Some runs are recorded by the store and never begin (seen on dmprd: about one in five,
- * from every kind of function). The function that started one watches, after it answered,
- * whether the run took up its claim, and starts another in its place once if not. Should
- * the first begin after all, it finds the claim taken and ends.
- */
-async function watchStart(swell: Starter, claim: string, runId: string | undefined, source: string, params: Record<string, unknown>): Promise<void> {
-  for (const wait of START_CHECKS_MS) {
-    await pause(wait);
-    const held = await readState(swell, "run");
-    if (!held || held.owner !== claim || held.adopted !== false) {
-      return;
-    }
-  }
-  const held = await readState(swell, "run");
-  if (held?.owner === claim && held.adopted === false) {
-    await swell.delete(`/state/${held.id}`);
-    console.warn(`The sync run ${runId} did not begin; starting another`);
-    if (runId) {
-      // Otherwise the dashboard lists it as starting until somebody ends it
-      try {
-        const settings = (await swell.settings()) as { id?: string } | null;
-        await swell.post("/:workflows/instances/terminate", { app_id: settings?.id, instance_id: runId, workflow_name: WORKFLOW });
-      } catch (err) {
-        console.warn("Unable to end the run that did not begin", (err as Error).message);
-      }
-    }
-    await startSync(swell, source, params);
-  }
-}
-
 /**
  * Starts a sync unless one is running: the running one looks for new marks before it ends.
  * The claim is taken here, for the run, so that a burst of notices starts one run and not
- * one each. A function cannot do the work itself: it has ten seconds. `waitUntil` is the
- * function's, for the watch over the run's start.
+ * one each. A function cannot do the work itself: it has ten seconds.
  */
-export async function startSync(
-  swell: Starter,
-  source: string,
-  params: Record<string, unknown> = {},
-  waitUntil?: (promise: Promise<unknown>) => void,
-): Promise<string | undefined> {
+export async function startSync(swell: Starter, source: string, params: Record<string, unknown> = {}): Promise<string | undefined> {
   const claim = crypto.randomUUID();
-  if (!(await takeClaim(swell, claim, Date.now(), true))) {
+  if (!(await takeClaim(swell, claim))) {
     return undefined;
   }
   let run: { id?: string };
@@ -133,6 +91,5 @@ export async function startSync(
     await releaseClaim(swell, claim);
     throw err;
   }
-  waitUntil?.(watchStart(swell, claim, run?.id, source, params).catch((err) => console.error("Unable to watch the run's start", (err as Error).message)));
   return run?.id || claim;
 }

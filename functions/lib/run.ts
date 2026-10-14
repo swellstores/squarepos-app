@@ -371,8 +371,7 @@ export async function run(req: RunRequest, step: Steps): Promise<Row> {
   const job: Job = action ? JOBS[action.id as string] || "sync" : data.full === true ? "full" : "sync";
   const swell = req.swell;
 
-  // The function that started the run took the claim for it. Taking it up comes first: the
-  // function watches for it, and starts another run when it does not happen
+  // The function that started the run took the claim for it: the run takes it up first
   const adopted =
     !action && typeof data.claim === "string"
       ? await step.do("claim", STEP, async () => ({ held: await holdsClaim(swell, data.claim) })).then((result) => result.held)
@@ -564,12 +563,15 @@ export async function run(req: RunRequest, step: Steps): Promise<Row> {
           summary.stopped = stock.lost ? "Another run took over." : "Square did not accept the access token.";
           break;
         }
-        if (stock.stopped > 0) {
-          await step.do(`stock alert ${round}`, STEP, async () => {
+        await step.do(`stock alert ${round}`, STEP, async () => {
+          if (stock.stopped > 0) {
             await raiseAlert(swell, "stock", `${stock.stopped} linked ${stock.stopped === 1 ? "item has" : "items have"} stopped syncing. They are listed with the reason under Products → Square stock → Needs attention.`);
-            return {};
-          });
-        }
+          } else if (((await swell.get("/items", { where: { status: "error" }, limit: 1 })) as Page)?.count === 0) {
+            // Over once no item needs starting again: an item that stops later is news, with its own e-mail
+            await clearAlert(swell, "stock");
+          }
+          return {};
+        });
       }
 
       if (plan.sales?.on) {

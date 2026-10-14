@@ -5,8 +5,7 @@ import { post as squareEvents } from "../../functions/square-events";
 import stockChanged from "../../functions/stock-changed";
 import sweep from "../../functions/sweep";
 import testConnection from "../../functions/test-connection";
-import { START_CHECKS_MS } from "../../functions/lib/marks";
-import { afterResponse, createRequest } from "../helpers/request";
+import { createRequest } from "../helpers/request";
 import { LOCATION, createSquare } from "../helpers/square";
 import type { TestSquare } from "../helpers/square";
 import { createStore } from "../helpers/store";
@@ -53,12 +52,9 @@ function addLink(product: Row, variationId: string, agreed: number): Row {
 beforeEach(() => {
   store = createStore({ settings: structuredClone(SETTINGS), mode: "function" });
   square = createSquare();
-  // The watch over a run's start looks once, at once
-  START_CHECKS_MS.splice(0, START_CHECKS_MS.length, 0);
 });
 
-afterEach(async () => {
-  await Promise.all(afterResponse.splice(0));
+afterEach(() => {
   vi.unstubAllGlobals();
 });
 
@@ -149,25 +145,6 @@ describe("a notice from Square", () => {
     await squareEvents(await notice({ type: "payment.updated", data: { object: { payment: { id: "P1", status: "COMPLETED" } } } }));
 
     expect(store.state.find((record) => record.key === "sales")).toMatchObject({ requested: true });
-    expect(store.runs).toHaveLength(1);
-  });
-
-  it("starts another run when the one it started does not begin", async () => {
-    await squareEvents(await notice(countNotice("V1", "4")));
-    await Promise.all(afterResponse.splice(0));
-
-    // Nobody took up the first claim: it was ended, and a second run started with a claim of its own
-    expect(store.terminated).toEqual(["wf_inst_1"]);
-    expect(store.runs).toHaveLength(2);
-    expect(store.state.find((record) => record.key === "run")?.owner).toBe(store.runs[1].data.claim);
-  });
-
-  it("leaves a run alone that took up its claim", async () => {
-    await squareEvents(await notice(countNotice("V1", "4")));
-    const claim = store.state.find((record) => record.key === "run")!;
-    Object.assign(claim, { adopted: true });
-    await Promise.all(afterResponse.splice(0));
-
     expect(store.runs).toHaveLength(1);
   });
 

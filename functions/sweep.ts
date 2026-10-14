@@ -49,7 +49,7 @@ export default async function (req: SwellRequest) {
     await ensurePaymentMethod(req.swell);
   }
   await checkNotices(req, settings);
-  const started = await startSync(req.swell, "sweep", { full: true }, (promise) => req.context.waitUntil(promise));
+  const started = await startSync(req.swell, "sweep", { full: true });
   if (!started) {
     // A run is working, or waiting to begin: it compares everything before it ends
     await writeState(req.swell, "sweep", { requested: true });

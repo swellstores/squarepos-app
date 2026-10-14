@@ -46,6 +46,6 @@ export async function post(req: SwellRequest) {
     await req.swell.put(`/state/${webhook.id}`, { date_received: new Date().toISOString() });
   }
 
-  const started = work ? await startSync(req.swell, "square", {}, (promise) => req.context.waitUntil(promise)) : undefined;
+  const started = work ? await startSync(req.swell, "square") : undefined;
   return { received: type, work, started: started || null };
 }

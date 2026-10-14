@@ -96,6 +96,22 @@ describe("from matching to a shared stock", () => {
     expect(square.count("V1")).toBe(3);
   });
 
+  it("raises one alert for items that stopped, and ends it once they are started again", async () => {
+    await start(action("start", { source: "record", record_id: link("MUG").id }, { side: "square" }), "action");
+    // Its product deleted
+    link("MUG").product_id = "f".repeat(24);
+    await start({ source: "sweep", full: true }, "function", "run-2");
+
+    expect(link("MUG").status).toBe("error");
+    expect(store.alerts.map((alert) => alert.key)).toEqual(["stock"]);
+
+    link("MUG").product_id = mug.id;
+    await start(action("start", { source: "record", record_id: link("MUG").id }, { side: "square" }), "action", "run-3");
+
+    expect(link("MUG").status).toBe("active");
+    expect(store.alerts).toHaveLength(0);
+  });
+
   it("leaves the stock alone while the sync is switched off", async () => {
     store.settings = { ...SETTINGS, inventory: { enabled: false } };
     await start(action("start", { source: "record", record_id: link("MUG").id }, { side: "square" }), "action");
@@ -142,15 +158,6 @@ describe("one run at a time", () => {
     expect(store.level(store.products[0])).toBe(5);
   });
 
-  it("takes over a claim whose run never began, sooner than one of a run that stopped", async () => {
-    await takeClaim(store.swell, "queued-run", Date.now(), true);
-    state("run")!.date_heartbeat = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-
-    await start({ source: "sweep", full: true });
-
-    expect(store.level(store.products[0])).toBe(5);
-  });
-
   it("looks again for marks that came while it worked", async () => {
     let late = true;
     square.intercept((call) => {
@@ -175,7 +182,7 @@ describe("one run at a time", () => {
   });
 
   it("gives back the claim the starting function took when Square cannot be reached at all", async () => {
-    await takeClaim(store.swell, "claim-1", Date.now(), true);
+    await takeClaim(store.swell, "claim-1");
     square.intercept((call) => (call.path === "/merchants/me" ? square.unavailable() : undefined));
 
     await expect(start({ source: "square", claim: "claim-1" })).rejects.toThrow();

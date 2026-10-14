@@ -12,18 +12,15 @@ import { isDuplicate, writeErrors } from "./settings";
 import type { StoreClient } from "./settings";
 import { readState } from "./state";
 
-/** A step never works longer than this after it checked the claim (see BATCH_MS in run.ts) */
-export const STALE_MS = 4 * 60 * 1000;
 /**
- * A claim that a function took for a run it started, and that no run has renewed since.
- * A run renews it in its first steps, so after this long the run is stuck in the queue
- * (seen for minutes after a push). Should it start later, it finds the claim taken and ends.
+ * A step never works longer than this after it checked the claim (see BATCH_MS in run.ts).
+ * A claim that a function took for a run that never began is taken over after it as well
  */
-export const UNADOPTED_MS = 90 * 1000;
+export const STALE_MS = 4 * 60 * 1000;
 
-async function create(swell: StoreClient, owner: string, forRun: boolean): Promise<boolean> {
+async function create(swell: StoreClient, owner: string): Promise<boolean> {
   try {
-    const created = await swell.post("/state", { key: "run", owner, date_heartbeat: new Date().toISOString(), adopted: !forRun });
+    const created = await swell.post("/state", { key: "run", owner, date_heartbeat: new Date().toISOString() });
     return Boolean(created) && !writeErrors(created);
   } catch (err) {
     if (isDuplicate(undefined, err)) {
@@ -33,30 +30,27 @@ async function create(swell: StoreClient, owner: string, forRun: boolean): Promi
   }
 }
 
-/**
- * Takes the claim. False when another run holds it and shows signs of life. `forRun` is set
- * by a function that takes the claim for the run it is about to start.
- */
-export async function takeClaim(swell: StoreClient, owner: string, now = Date.now(), forRun = false): Promise<boolean> {
-  if (await create(swell, owner, forRun)) {
+/** Takes the claim. False when another run holds it and shows signs of life */
+export async function takeClaim(swell: StoreClient, owner: string, now = Date.now()): Promise<boolean> {
+  if (await create(swell, owner)) {
     return true;
   }
   const held = await readState(swell, "run");
   if (!held) {
     // Released between the two requests
-    return create(swell, owner, forRun);
+    return create(swell, owner);
   }
   if (held.owner === owner) {
     return true;
   }
   const heartbeat = new Date(held.date_heartbeat || held.date_created || 0).getTime();
-  if (now - heartbeat < (held.adopted === false ? UNADOPTED_MS : STALE_MS)) {
+  if (now - heartbeat < STALE_MS) {
     return false;
   }
   // Removing the dead claim by its id and creating a new one lets one of two takers through:
   // the second removal finds nothing, and the second create is refused
   await swell.delete(`/state/${held.id}`);
-  return create(swell, owner, forRun);
+  return create(swell, owner);
 }
 
 /** Renews the claim. False when the run no longer holds it and must stop writing */
@@ -65,7 +59,7 @@ export async function holdsClaim(swell: StoreClient, owner: string): Promise<boo
   if (!held || held.owner !== owner) {
     return false;
   }
-  await swell.put(`/state/${held.id}`, { date_heartbeat: new Date().toISOString(), adopted: true });
+  await swell.put(`/state/${held.id}`, { date_heartbeat: new Date().toISOString() });
   return true;
 }
 
