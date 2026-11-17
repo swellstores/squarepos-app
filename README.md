@@ -212,4 +212,4 @@ The time the sales import was switched on is computed by the settings save that 
 
 ## License
 
-[MIT](LICENSE.md)
+Swell App License. See [LICENSE](LICENSE).

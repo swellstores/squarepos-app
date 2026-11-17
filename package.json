@@ -8,6 +8,7 @@
     "@swell/apps-sdk": "2.0.0-alpha.0"
   },
   "name": "square-pos",
+  "license": "SEE LICENSE IN LICENSE",
   "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit && tsc --build --noEmit test",
